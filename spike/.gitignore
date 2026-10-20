@@ -1,0 +1,6 @@
+# Never commit secrets.
+.env
+.env.*
+!.env.example
+*.key
+__pycache__/

@@ -1,0 +1,21 @@
+
+# Never commit secrets
+.env
+.env.*
+!.env.example
+*.key
+
+# Test keys
+tests/.test_keys
+.test_keys
+
+# Python cache
+__pycache__/
+
+# Supabase local temporary files
+supabase/.temp/
+supabase/.branches/
+
+# Any other temporary folders
+.temp/
+**/.temp/
