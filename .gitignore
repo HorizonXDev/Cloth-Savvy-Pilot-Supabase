@@ -9,6 +9,10 @@
 tests/.test_keys
 .test_keys
 
+# Local test-run logs (harness + suite)
+tests/.harness_run.log
+tests/.api_tests_run.log
+
 # Python cache
 __pycache__/
 

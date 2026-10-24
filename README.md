@@ -30,6 +30,9 @@ Cloth-Savvy-Pilot-supabase/
 └── spike/                       the finished spike — do not modify
 ```
 
+Phases 1–3 added the Edge Function API layer (`supabase/functions/`,
+`tests/`, `docs/`, `../tools/issue_key.py`) — see **§11 Part B** below.
+
 ### What each migration does (plain language)
 
 | File | What it does |
@@ -339,3 +342,261 @@ FK's `ON DELETE CASCADE`, which bypasses the missing DELETE privilege
 * `REFUSED: missing environment variable(s)` → fix `.env` or export the vars
 * `PGRST202` on an RPC → function signature cache stale: same `NOTIFY`
 * Audit offenders list non-empty → do not run tests until it is empty
+
+---
+
+# Part B — the API layer (Phases 1–3)
+
+The database layer above plus four Edge Functions that talk only to it (all
+queries go through the SECURITY INVOKER RPCs in `0007_functions.sql` — no
+function touches a table directly). Plain language first; every claim below
+was exercised locally or is listed as UNVERIFIED in §11.9.
+
+| Endpoint (platform path) | What it does |
+|---|---|
+| `GET  /functions/v1/health`    | Liveness + dependency status (database, encoder). No auth beyond the platform key check. |
+| `GET  /functions/v1/occasions` | The tenant's combo recipes: every occasion it knows, with its sections. The server OWNS this list. |
+| `POST /functions/v1/search`    | Text search over the tenant's products (query → encoder → `search_products` RPC). |
+| `POST /functions/v1/combos`    | Build `n` outfit combos for an occasion: recipe skeleton + LLM step (`GROQ_API_KEY`) with deterministic recipe fallback, greedy product dedupe, honest `missing_sections`. |
+
+Every endpoint authenticates with `Authorization: Bearer sk_live_...` or
+`sk_test_...` (decision D3: SHA-256 at rest via `resolve_api_key`). Over the
+rate limit → `429` + `Retry-After` (decision D4). Tenant settings come from
+`tenants.settings` — shape, defaults and brand examples: [docs/settings.md](docs/settings.md).
+
+## 11.1 What was added
+
+```
+Cloth-Savvy-Pilot-supabase/
+├── supabase/
+│   ├── config.toml              544xx local ports + [functions.*] verify_jwt=false (auth is our sk_ key check)
+│   ├── functions/
+│   │   ├── .env                 LOCAL-ONLY env for `functions serve` (gitignored; names in .env.example)
+│   │   ├── _pilot/              shared core: auth, rate limit, metering, encoder/LLM clients,
+│   │   │                        settings/recipes/validation/errors, pure logic + pilot.test.ts
+│   │   ├── health/index.ts      GET  /functions/v1/health
+│   │   ├── occasions/index.ts   GET  /functions/v1/occasions
+│   │   ├── search/index.ts      POST /functions/v1/search
+│   │   └── combos/index.ts      POST /functions/v1/combos
+│   └── migrations/0008_catalog_facets.sql   facet rollups for recipe fallback text
+├── docs/settings.md             tenants.settings reference + kurta/saree recipe examples
+├── tests/
+│   ├── api_tests.py             26 end-to-end API tests against the LOCAL stack + stubs
+│   ├── serve_local.ts           host-Deno harness serving the 4 functions (auto-spawned)
+│   ├── stub_encoder.py          deterministic local encoder stub (embed_text shared with tests)
+│   ├── stub_llm.py              local OpenAI-compatible LLM stub (combo plans)
+│   └── live_smoke.py            4-call smoke test against a RUNNING API (you run this)
+└── (../tools/issue_key.py       owner tool: generate + register ONE sk_ key — see §11.5)
+```
+
+## 11.2 Running the API tests — LOCAL stack
+
+Standard library only; no pip installs. The suite spawns the two stubs
+itself if their ports (8841/8842) are not already up, and it NEVER touches
+the live Modal encoder or a real LLM.
+
+By default it also serves the four Edge Functions itself with a host-Deno
+harness (`tests/serve_local.ts`, auto-spawned on `127.0.0.1:54431`; the
+first run downloads Deno 2.1.4 via npx). Two local-stack quirks make this
+necessary (verified 2026-10-24): the Docker edge-runtime runs on the
+project's network where `127.0.0.1` is the container, so it cannot reach
+the loopback stubs; and local Kong's `cors` plugin overrides our
+`Access-Control-Allow-Origin` with `"*"`, so A19 (allowlist, never `*`)
+would be untestable through the gateway. Export `PILOT_FUNCTIONS_URL` to
+target an already-served instance instead (e.g. `supabase functions
+serve` — A19 will then report Kong's `*`); hosted behaviour is covered by
+`tests/live_smoke.py`.
+
+```powershell
+# PowerShell (Windows)
+cd Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase
+supabase start                                   # if not already running
+# .env beside tests/ must have PILOT_SUPABASE_URL + the two keys (§3 above)
+python tests\api_tests.py                        # PASS/FAIL table; exit 0 = 26/26
+python tests\cleanup_test_tenants.py
+```
+
+```bash
+# bash (Git Bash / Linux / macOS)
+cd Cloth-Savvy-Pilot/Cloth-Savvy-Pilot-supabase
+supabase start
+python tests/api_tests.py && python tests/cleanup_test_tenants.py
+```
+
+Expected: a PASS/FAIL table, `RESULT: 26/26`, exit code 0. Plaintext test
+keys go only to `tests/.test_keys` (gitignored) and are never printed.
+
+The pure logic (settings validation, recipe lookup, combo assembly/dedupe,
+error mapping, key format) is unit-tested offline — no Docker, no network:
+
+```powershell
+npx -y deno@2.1.4 test supabase\functions\_pilot\pilot.test.ts   # RESULT: 21 passed
+# (or plain `deno test ...` if Deno is installed)
+```
+
+## 11.3 Setting the secrets — HOSTED project
+
+The functions read these environment variables (names only in
+`.env.example`):
+
+| Secret | Required | Meaning |
+|---|---|---|
+| `ENCODER_URL` | yes (search/combos) | base URL of your running encoder, e.g. `https://<your-encoder>.modal.run` |
+| `ENCODER_AUTH_TOKEN` | if the encoder requires it | bearer token the encoder expects |
+| `GROQ_API_KEY` | no (combos LLM step) | pilot-dedicated Groq key; WITHOUT it combos still work via the deterministic recipe fallback |
+| `GROQ_MODEL` | no | defaults to `openai/gpt-oss-20b` |
+| `ALLOWED_ORIGINS` | recommended | comma-separated CORS allowlist, e.g. `https://www.yourbrand.example` |
+
+(`PILOT_LLM_BASE_URL` exists for LOCAL tests only — it redirects the LLM
+call to a loopback stub and is ignored when not loopback.)
+
+```powershell
+# PowerShell — placeholders, run from Cloth-Savvy-Pilot-supabase
+supabase secrets set `
+  ENCODER_URL=https://<your-encoder>.modal.run `
+  ENCODER_AUTH_TOKEN=<encoder-bearer-token> `
+  GROQ_API_KEY=<groq-api-key> `
+  ALLOWED_ORIGINS=https://www.yourbrand.example `
+  --project-ref <your-project-ref>
+```
+
+```bash
+# bash — one line
+supabase secrets set ENCODER_URL=https://<your-encoder>.modal.run ENCODER_AUTH_TOKEN=<encoder-bearer-token> GROQ_API_KEY=<groq-api-key> ALLOWED_ORIGINS=https://www.yourbrand.example --project-ref <your-project-ref>
+```
+
+`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are injected by the platform —
+never set them yourself and never put the service key in a function `.env`
+that could be committed.
+
+## 11.4 Deploying the functions — one per command
+
+```powershell
+# PowerShell — from Cloth-Savvy-Pilot-supabase
+supabase functions deploy health    --project-ref <your-project-ref>
+supabase functions deploy search    --project-ref <your-project-ref>
+supabase functions deploy occasions --project-ref <your-project-ref>
+supabase functions deploy combos    --project-ref <your-project-ref>
+```
+
+(Same four commands in bash.) Auth is our own `sk_` key check, so local
+`config.toml` sets `verify_jwt = false` per function — auth happens inside
+the function. UNVERIFIED (§11.9): whether the deployed platform honours
+per-function `verify_jwt` from `config.toml` on the current CLI; if a
+deployed function answers platform 401s before our own errors, re-run the
+deploy with `--no-verify-jwt`.
+
+## 11.5 Issuing an API key — tools/issue_key.py
+
+The tool prints the plaintext key EXACTLY ONCE (copy it into your password
+manager — it is gone afterwards), stores only its SHA-256, and writes
+nothing to disk. From `Cloth-Savvy-Pilot-supabase`:
+
+```powershell
+# PowerShell — local stack
+$env:PILOT_SUPABASE_URL="http://127.0.0.1:54421"
+$env:PILOT_SUPABASE_SERVICE_KEY="<service key from `supabase status`>"
+$env:PILOT_TENANT_ID="<tenant uuid>"
+$env:PILOT_KEY_ENVIRONMENT="sandbox"   # sk_test_... ; use "live" for sk_live_...
+$env:PILOT_KEY_LABEL="demo-1"          # optional
+python ..\tools\issue_key.py
+```
+
+```bash
+# bash — hosted project
+export PILOT_ALLOW_REMOTE=1 PILOT_PROJECT_REF=<your-project-ref>
+export PILOT_SUPABASE_URL=https://<your-project-ref>.supabase.co
+export PILOT_SUPABASE_SERVICE_KEY=<service key>
+export PILOT_TENANT_ID=<tenant uuid>
+export PILOT_KEY_ENVIRONMENT=live
+python ../tools/issue_key.py
+```
+
+Keys are `sk_live_`/`sk_test_` + 43 URL-safe chars (decision D3). `pk_`
+reserved for future browser-safe keys — never issued. Rotation = issue new,
+switch, revoke old (§6 above).
+
+## 11.6 Example combo recipes (kurta brand + saree brand)
+
+Combos recipes live in `tenants.settings.combos` — occasion → ordered pilot
+sections. Full copy-paste examples for a kurta brand and a saree brand (plus
+every default and validation rule) are in [docs/settings.md](docs/settings.md).
+The short version:
+
+```json
+// a kurta brand (kurta sets map onto "top"; "dress" for one-piece looks)
+{"currency": "INR", "min_similarity": 0.30, "default_limit": 10,
+ "rate_limit_per_min": 60,
+ "combos": {"daily_casual": ["top", "bottom", "footwear"],
+            "office":       ["top", "bottom", "outerwear", "accessory"],
+            "festive":      ["dress", "footwear", "jewellery"],
+            "wedding_guest":["top", "bottom", "footwear", "bag"]}}
+
+// a saree brand
+{"currency": "INR", "min_similarity": 0.25, "default_limit": 12,
+ "rate_limit_per_min": 60,
+ "combos": {"daily":   ["saree", "blouse", "accessory"],
+            "office":  ["saree", "blouse", "bag"],
+            "wedding": ["saree", "blouse", "jewellery", "bag"],
+            "bridal":  ["saree", "blouse", "dupatta", "jewellery", "footwear", "bag"]}}
+```
+
+After updating settings, `GET /functions/v1/occasions` shows exactly what
+the server sees — check it; a typo'd section silently drops that one recipe.
+
+## 11.7 Running live_smoke.py against a RUNNING API
+
+Four calls — health, occasions, one search, one combo — with a PASS/FAIL
+line each; exits 1 on any failure; NEVER prints the key.
+
+```powershell
+# PowerShell — hosted, after deploy + secrets + issue_key.py
+$env:PILOT_LIVE_FUNCTIONS_URL="https://<your-project-ref>.supabase.co/functions/v1"
+$env:PILOT_LIVE_API_KEY="<sk_live_... key you just saved>"
+$env:PILOT_LIVE_ORIGIN="https://www.yourbrand.example"   # optional: also verifies the CORS allowlist
+python tests\live_smoke.py
+```
+
+```bash
+# bash — LOCAL stack (a sk_test_ key from the local issue_key.py run)
+export PILOT_LIVE_FUNCTIONS_URL=http://127.0.0.1:54421/functions/v1
+export PILOT_LIVE_API_KEY=<sk_test_... key>
+python tests/live_smoke.py
+```
+
+Optional: `PILOT_LIVE_QUERY` (search text), `PILOT_LIVE_OCCASION` (defaults
+to the first occasion your recipes define). Combos may call a real LLM —
+the script allows 90 s per call.
+
+## 11.8 API-layer decisions beyond the brief
+
+1. **CORS**: a small explicit allowlist (`ALLOWED_ORIGINS`) instead of
+   `*` — the consumer web app's origin is registered per environment.
+2. **LLM step is optional at deploy time**: without `GROQ_API_KEY`, combos
+   fall back to the deterministic recipe text (log line says so). The API
+   never 500s because an LLM is missing.
+3. **`0008_catalog_facets.sql`**: per-section facet rollups (categories,
+   colours) so the recipe-fallback embedding text uses the tenant's REAL
+   vocabulary instead of invented words.
+4. **Metering on every successful call** goes to `usage_events` with the
+   key id — the same rows the rate limiter counts (D4), so billing and
+   limiting can never disagree.
+5. **Errors are typed** (`validation`, `auth`, `rate_limited`,
+   `unsupported_occasion`, `upstream_encoder`, `upstream_llm`, ...): every
+   non-2xx answer is `{error: {type, message, ...}}` with a stable `type`
+   string for callers to branch on.
+
+## 11.9 API-layer UNVERIFIED (checked 2026-10-24)
+
+* **Everything hosted.** All API tests ran against the LOCAL Docker stack
+  with the two stubs. No function, secret, deploy or key has been run
+  against a hosted project — §11.3–§11.7 are written from the CLI's help
+  and the local equivalents, not from a hosted run.
+* **Per-function `verify_jwt` on deploy** — present in this CLI's config
+  schema and the consumer project's config, but not exercised on the
+  current CLI (see §11.4).
+* **Real encoder parity** — the stub is deterministic; the real Modal
+  encoder's model/revision strings were pinned from Step 0 but never called
+  from these functions.
+* **Real Groq call** — the LLM path ran only against the local stub.
+  `live_smoke.py` with `GROQ_API_KEY` set is the first real check.

@@ -415,3 +415,34 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+# ---------------------------------------------------------------------------
+# Pilot API functions (Phases 1-3, PLAN_BACKEND_AND_DASHBOARD.md).
+#
+# verify_jwt = false is REQUIRED for these routes: they authenticate with an
+# API key inside the function (Authorization: Bearer sk_live_…/sk_test_…),
+# server-to-server. The platform's JWT check expects a Supabase USER session
+# JWT, which API-key clients never have — leaving verify_jwt on would 401
+# every legitimate caller before our auth code runs. The API key IS the
+# authentication here; every request still passes auth.ts -> resolve_api_key,
+# and 401/403 are produced there. UNVERIFIED (2026-10): per-function
+# verify_jwt remains supported in the current CLI/hosts (it is present in
+# this CLI version's config schema and in the consumer project's config).
+# Note the platform path is /functions/v1/<name> — the brief's
+# "GET /v1/health" == function `health`, etc.
+# ---------------------------------------------------------------------------
+[functions.health]
+enabled = true
+verify_jwt = false
+
+[functions.search]
+enabled = true
+verify_jwt = false
+
+[functions.occasions]
+enabled = true
+verify_jwt = false
+
+[functions.combos]
+enabled = true
+verify_jwt = false
