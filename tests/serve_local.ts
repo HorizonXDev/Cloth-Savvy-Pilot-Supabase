@@ -1,5 +1,6 @@
-// tests/serve_local.ts — host-side harness that serves the four pilot Edge
-// Functions OUTSIDE Docker, for tests/api_tests.py.
+// tests/serve_local.ts — host-side harness that serves the pilot Edge
+// Functions OUTSIDE Docker, for tests/api_tests.py / admin_tests.py /
+// tenant_portal_tests.py (13 routes: API + admin_* + tenant_*).
 //
 // WHY THIS EXISTS (found 2026-10-24 on the local stack, CLI v2.118):
 //   1. `supabase start`'s edge-runtime container lives on the project's
@@ -22,9 +23,27 @@
 // Env: loads supabase/functions/.env (the same file `functions serve`
 // uses); SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY already present in the
 // process environment always win over the file.
+// SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are normally injected by the
+// platform and are NOT in functions/.env — for a bare hand-run they fall
+// back to tests/.env then .env (PILOT_SUPABASE_URL / PILOT_SUPABASE_
+// SERVICE_KEY, the same file the test suites read).
 
 const PORT = Number(Deno.args[0] ?? 54431);
-const FN_NAMES = ["health", "search", "occasions", "combos"];
+const FN_NAMES = [
+  "health",
+  "search",
+  "occasions",
+  "combos",
+  "admin_tenants",
+  "admin_keys",
+  "admin_usage",
+  "admin_catalog",
+  "admin_tenant_users",
+  "tenant_account",
+  "tenant_keys",
+  "tenant_usage",
+  "tenant_catalog",
+];
 
 // --- load supabase/functions/.env (process env wins) --------------------
 try {
@@ -44,6 +63,38 @@ try {
   }
 } catch {
   // no file — platform/process env only (same as a deployed function)
+}
+
+// --- local fallback: platform vars from tests/.env / .env ----------------
+// The real edge runtime (and the test spawner) inject SUPABASE_URL +
+// SUPABASE_SERVICE_ROLE_KEY; a hand-run on the host has neither, so take
+// them from the PILOT_* file the suites use — process env still wins.
+const PILOT_MAP: Record<string, string> = {
+  PILOT_SUPABASE_URL: "SUPABASE_URL",
+  PILOT_SUPABASE_SERVICE_KEY: "SUPABASE_SERVICE_ROLE_KEY",
+};
+const snapshot = Deno.env.toObject();
+for (const file of [new URL(".env", import.meta.url), new URL("../.env", import.meta.url)]) {
+  if (Deno.env.get("SUPABASE_URL") && Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) break;
+  let text: string;
+  try {
+    text = await Deno.readTextFile(file);
+  } catch {
+    continue; // no such file — try the next candidate
+  }
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (!m) continue;
+    let val = m[2].trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"') && val.length >= 2) ||
+      (val.startsWith("'") && val.endsWith("'") && val.length >= 2)
+    ) {
+      val = val.slice(1, -1);
+    }
+    const target = PILOT_MAP[m[1]];
+    if (target && !(target in snapshot) && !Deno.env.get(target)) Deno.env.set(target, val);
+  }
 }
 
 // --- capture each function's Deno.serve handler at import time -----------

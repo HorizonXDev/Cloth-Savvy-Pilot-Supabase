@@ -78,6 +78,21 @@ def call(method: str, url: str, key: str | None, origin: str | None,
     return status, parsed, hdrs
 
 
+def err_detail(body: dict | list | None) -> str:
+    """The API's error envelope ({error:{code,message,request_id}}) as one line,
+    so a FAIL shows WHY instead of only the status (added 2026-10-26: the 503
+    on combos gave no clue until the body was readable)."""
+    if not isinstance(body, dict):
+        return ""
+    err = body.get("error")
+    if not isinstance(err, dict):
+        return ""
+    msg = f"  error={err.get('code')}: {err.get('message')}"
+    if err.get("request_id"):
+        msg += f" (request_id={err['request_id']})"
+    return msg
+
+
 def show(step: str, status: int, ok: bool, detail: str, hdrs: dict) -> bool:
     flag = "PASS" if ok else "FAIL"
     rid = ""
@@ -127,11 +142,14 @@ def main() -> int:
     if status == 200 and items:
         top = items[0]
         print(f"      top: {top.get('product', {}).get('title')!r} "
-              f"sim={top.get('similarity')}")
-
-    # 4. one combos build
+              f"sim={top.get('similarity')}")    # 4. one combos build
+    # GET /v1/occasions answers with OBJECTS ({occasion, sections:[...]}) —
+    # send only the name: POST /v1/combos validates `occasion` as a string
+    # and returns 400 for an object (caught 2026-10-26 on the hosted gate).
+    first = occs[0] if occs else None
     occasion = os.environ.get("PILOT_LIVE_OCCASION") or (
-        occs[0] if occs else None)
+        first.get("occasion") if isinstance(first, dict) else first
+    )
     if occasion is None:
         print("FAIL  no occasion available (occasions step failed?)")
         return 1
@@ -143,6 +161,7 @@ def main() -> int:
     ok = status == 200 and body.get("status") in ("ok", "partial", "no_match")
     detail = (f"occasion={occasion!r} status={body.get('status') if isinstance(body, dict) else '?'} "
               f"combos={len(combos)} engine={meta.get('engine')}")
+    detail += err_detail(body)
     all_ok &= show("combos", status, ok, detail, hdrs)
 
     if combos:

@@ -21,13 +21,28 @@ export function allowedOrigins(env: PilotEnv): string[] {
 }
 
 /** Headers to attach to a response, or null when the origin is not allowed
- * (or the request has no Origin = server-to-server). */
-export function corsHeadersFor(env: PilotEnv, origin: string | null): Record<string, string> | null {
+ * (or the request has no Origin = server-to-server).
+ * `allowedOverride` lets a route use its own allowlist (admin_* routes use
+ * ADMIN_ALLOWED_ORIGINS); when omitted the env allowlist applies.
+ * `methods` advertises the ROUTE's real methods in the preflight (a
+ * hardcoded `GET, POST, OPTIONS` made every admin PATCH fail its preflight
+ * — caught 2026-10-25 in the browser; found because Python tests never
+ * enforce Access-Control-Allow-Methods). */
+export function corsHeadersFor(
+  env: PilotEnv,
+  origin: string | null,
+  allowedOverride?: readonly string[],
+  methods?: readonly string[],
+): Record<string, string> | null {
   if (!origin) return null;
-  if (!allowedOrigins(env).includes(origin)) return null; // never echoed
+  const allowed = allowedOverride ?? allowedOrigins(env);
+  if (!allowed.includes(origin)) return null; // never echoed
+  const allowMethods = methods && methods.length > 0
+    ? [...new Set(["OPTIONS", ...methods])].join(", ")
+    : "GET, POST, OPTIONS";
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": allowMethods,
     "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Request-Id",
     "Access-Control-Expose-Headers": "X-Request-Id, Server-Timing, Retry-After",
     "Access-Control-Max-Age": "600",

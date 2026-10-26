@@ -27,6 +27,16 @@ export interface PilotEnv {
   GROQ_API_KEY?: string;
   GROQ_MODEL?: string;
   ALLOWED_ORIGINS?: string;
+  /** Admin dashboard: bearer token every admin_* route requires. When unset
+   * the admin routes fail closed (every request refused). */
+  ADMIN_TOKEN?: string;
+  /** Optional CORS allowlist for admin_* routes only (same comma format).
+   * Falls back to ALLOWED_ORIGINS when unset. */
+  ADMIN_ALLOWED_ORIGINS?: string;
+  /** Optional CORS allowlist for tenant_* (portal) routes only (same comma
+   * format). Falls back to ALLOWED_ORIGINS when unset. Keeping it separate
+   * lets the portal origin stay off the public API's and the admin's lists. */
+  TENANT_ALLOWED_ORIGINS?: string;
   PILOT_LLM_BASE_URL?: string;
 }
 

@@ -20,7 +20,9 @@ Cloth-Savvy-Pilot-supabase/
 │   ├── 0004_api_keys.sql        hashed API keys
 │   ├── 0005_usage_events.sql    append-only metering log
 │   ├── 0006_ingestion_runs.sql  import/sync job records
-│   └── 0007_functions.sql       create/drop tenant, key resolve/create, search, explain
+│   ├── 0007_functions.sql       create/drop tenant, key resolve/create, search, explain
+│   ├── 0008_catalog_facets.sql  facet rollups for recipe fallback text
+│   └── 0009_tenant_users.sql    portal logins: which auth user belongs to which tenant
 ├── schema_audit.sql             read-only lockdown audit (run after every migration)
 ├── tests/
 │   ├── isolation_tests.py       T1–T15, PASS/FAIL table, exit 1 on failure
@@ -44,6 +46,8 @@ Phases 1–3 added the Edge Function API layer (`supabase/functions/`,
 | `0005_usage_events.sql` | `usage_events`: append-only metering rows. Composite FK `(tenant_id, key_id) → api_keys(tenant_id, id)` — a cross-tenant reference is impossible at write time. `service_role` gets only `SELECT, INSERT` (see Decisions for why this beats a trigger). |
 | `0006_ingestion_runs.sql` | `ingestion_runs`: one row per import job, counters and timestamps, FK to `tenants`. |
 | `0007_functions.sql` | All the RPCs, `SECURITY INVOKER`, `search_path = ''`, `EXECUTE` for `service_role` **only**: `create_tenant`, `drop_tenant`, `resolve_api_key`, `create_api_key`, `search_products`, `explain_search_products`. Ends with `NOTIFY pgrst, 'reload schema'`. |
+| `0008_catalog_facets.sql` | Materialized facet rollups (brand/category/colour) per tenant+section so the deterministic recipe fallback can match products without the encoder. |
+| `0009_tenant_users.sql` | `tenant_users`: the portal-login membership table — exactly which Supabase Auth user belongs to exactly which tenant. `user_id` UNIQUE (one login = one tenant), FKs to `tenants` and `auth.users` both `ON DELETE CASCADE`, `revoked_at` fails a login closed. RLS enabled+forced, zero privileges for the API roles. |
 | `schema_audit.sql` | Creates `schema_audit()`: checks every table in `public` (parent, every partition, every other table) for RLS enabled+forced, zero `anon`/`authenticated` privileges, a `tenant_id` column on everything except `tenants`, and checks every function for service_role-only `EXECUTE`. Empty `offenders` = pass. Run it standalone after any future migration. |
 
 ---
@@ -60,7 +64,9 @@ query window (each file ends with its own `NOTIFY pgrst, 'reload schema'`):
 5. `migrations/0005_usage_events.sql`
 6. `migrations/0006_ingestion_runs.sql`
 7. `migrations/0007_functions.sql`
-8. `schema_audit.sql`   ← the trailing query must show **zero** offenders
+8. `migrations/0008_catalog_facets.sql`
+9. `migrations/0009_tenant_users.sql`
+10. `schema_audit.sql`   ← the trailing query must show **zero** offenders
 
 Every file is idempotent (`if not exists` / `create or replace` / grant-or-
 revoke safely repeated), so a re-run is safe. If the audit shows offenders,
@@ -374,15 +380,30 @@ Cloth-Savvy-Pilot-supabase/
 │   │   ├── .env                 LOCAL-ONLY env for `functions serve` (gitignored; names in .env.example)
 │   │   ├── _pilot/              shared core: auth, rate limit, metering, encoder/LLM clients,
 │   │   │                        settings/recipes/validation/errors, pure logic + pilot.test.ts
+│   │   ├── _admin/admin.ts      shared ADMIN_TOKEN guard (constant-time) + admin helpers
+│   │   ├── _tenant/tenant.ts    shared PORTAL guard: session JWT -> exactly one tenant
 │   │   ├── health/index.ts      GET  /functions/v1/health
 │   │   ├── occasions/index.ts   GET  /functions/v1/occasions
 │   │   ├── search/index.ts      POST /functions/v1/search
-│   │   └── combos/index.ts      POST /functions/v1/combos
-│   └── migrations/0008_catalog_facets.sql   facet rollups for recipe fallback text
+│   │   ├── combos/index.ts      POST /functions/v1/combos
+│   │   ├── admin_tenants/       admin: list/create/suspend tenants + settings editor
+│   │   ├── admin_keys/          admin: issue (show-once)/list/revoke sk_ keys
+│   │   ├── admin_usage/         admin: usage_events aggregates per tenant/key/day
+│   │   ├── admin_catalog/       admin: product browse, CSV import batches, search preview
+│   │   ├── admin_tenant_users/  admin: provision/list/revoke portal logins (invite|password)
+│   │   ├── tenant_account/      portal: whoami + settings (session-scoped)
+│   │   ├── tenant_keys/         portal: issue (plaintext ONCE)/list/revoke sk_ keys
+│   │   ├── tenant_usage/        portal: usage aggregates for the session's tenant only
+│   │   └── tenant_catalog/      portal: product browse + search preview (own tenant)
+│   └── migrations/              0008_catalog_facets.sql (facets) + 0009_tenant_users.sql (portal logins)
 ├── docs/settings.md             tenants.settings reference + kurta/saree recipe examples
+├── ../admin-dashboard/          Next.js ADMIN dashboard (tenants/keys/catalog/usage) — §11.10
+│                                (standalone project, one level up — not inside this folder)
 ├── tests/
 │   ├── api_tests.py             26 end-to-end API tests against the LOCAL stack + stubs
-│   ├── serve_local.ts           host-Deno harness serving the 4 functions (auto-spawned)
+│   ├── admin_tests.py           12 end-to-end tests for the admin_* dashboard functions
+│   ├── tenant_portal_tests.py   14 end-to-end tests incl. the admin/portal separation matrix
+│   ├── serve_local.ts           host-Deno harness serving all 13 functions (auto-spawned)
 │   ├── stub_encoder.py          deterministic local encoder stub (embed_text shared with tests)
 │   ├── stub_llm.py              local OpenAI-compatible LLM stub (combo plans)
 │   └── live_smoke.py            4-call smoke test against a RUNNING API (you run this)
@@ -430,8 +451,9 @@ The pure logic (settings validation, recipe lookup, combo assembly/dedupe,
 error mapping, key format) is unit-tested offline — no Docker, no network:
 
 ```powershell
-npx -y deno@2.1.4 test supabase\functions\_pilot\pilot.test.ts   # RESULT: 21 passed
-# (or plain `deno test ...` if Deno is installed)
+npx -y deno@2.1.4 run supabase\functions\_pilot\pilot.test.ts    # RESULT: 21 passed
+# (or plain `deno run ...` if Deno is installed — it is a check()-style
+#  script: `deno test` discovers 0 tests and would green-light vacuously)
 ```
 
 ## 11.3 Setting the secrets — HOSTED project
@@ -600,3 +622,229 @@ the script allows 90 s per call.
   from these functions.
 * **Real Groq call** — the LLM path ran only against the local stub.
   `live_smoke.py` with `GROQ_API_KEY` set is the first real check.
+
+---
+
+## 11.10 The admin dashboard (`../admin-dashboard/`)
+
+A single-owner Next.js app (Next 16 / React 19 / Tailwind 4, same stack as
+Cloth-Savvy-Web) that talks ONLY to the four `admin_*` Edge Functions — the
+service key never reaches the browser. It gives you: create/suspend
+_tenants + a validated settings editor (combo recipes, limits), issue/list/
+_revoke API keys (plaintext shown exactly once), a CSV import wizard with
+_run history + per-row failure reporting, a paginated product browser with
+archive/restore, a search preview (real encoder + real RPC), usage
+aggregates, and a health view.
+
+**Auth (decision D5, single-owner):** one shared `ADMIN_TOKEN` secret,
+pasted on the login screen, kept in browser localStorage only, verified
+constant-time inside every admin function. No token set = admin routes
+fail closed (500). Admin calls are NOT metered and never touch
+`usage_events`.
+
+### Run it locally
+
+```bash
+cd Cloth-Savvy-Pilot/Cloth-Savvy-Pilot-supabase
+supabase start                    # if not already running
+# 1. serve the functions (host harness — all 13 routes, no Docker/Kong):
+npx -y deno@2.1.4 run --allow-net --allow-env --allow-read tests/serve_local.ts 54431 &
+# 2. the two stubs (search preview / import need the encoder stub):
+STUB_ENCODER_TOKEN=local-stub-encoder-token python tests/stub_encoder.py --port 8841 &
+python tests/stub_llm.py --port 8842 &
+# 3. the admin dashboard (standalone project, one level UP from here):
+cd ../admin-dashboard && cp .env.example .env.local && npm install && npm run dev
+# → http://localhost:3000 — login token = ADMIN_TOKEN from supabase/functions/.env
+#   (local value: local-admin-token-dev)
+```
+
+Notes:
+* `npm run dev` pins **port 3000** because the local admin CORS allowlist
+  (`ADMIN_ALLOWED_ORIGINS=http://localhost:3000` in `supabase/functions/.env`)
+  must match the dashboard origin — a different port needs that variable
+  updated.
+* The script passes **`--webpack`** on purpose: on this machine Turbopack
+  dev crashes the render worker on every dynamic route (`[id]`) with
+  "Jest worker encountered 2 child process exceptions" — webpack mode is
+  stable. Revisit when the Next release fixes it.
+* Test suites needed it too: `python tests/admin_tests.py` (12 tests:
+  auth, tenants, strict settings, keys show-once/revoke, suspend→403,
+  usage, import counters, search preview, archive, isolation, admin CORS,
+  health).
+
+### Deploy it — HOSTED
+
+```bash
+# from Cloth-Savvy-Pilot-supabase
+supabase functions deploy admin_tenants --project-ref <ref>
+supabase functions deploy admin_keys     --project-ref <ref>
+supabase functions deploy admin_usage    --project-ref <ref>
+supabase functions deploy admin_catalog  --project-ref <ref>
+
+# one strong secret (shown once — store it in your password manager):
+openssl rand -hex 32
+supabase secrets set ADMIN_TOKEN=<that value> \
+  ADMIN_ALLOWED_ORIGINS=https://your-dashboard-origin.example \
+  --project-ref <ref>
+
+# point the admin dashboard at hosted:
+cd ../admin-dashboard && cp .env.example .env.local
+#   NEXT_PUBLIC_FUNCTIONS_URL=https://<ref>.supabase.co/functions/v1
+npm run build && npm run start     # or any static/Node host you choose
+```
+
+Rules: `ADMIN_TOKEN` lives ONLY in Supabase secrets + the operator's
+password manager — never in a repo file, never in `.env.local` of the
+repo, never logged. Rotate by re-running `supabase secrets set` with a
+fresh value (both sides pick it up on the next request; no redeploy).
+
+---
+
+## 11.11 The tenant portal — BACKEND (`tenant_*` + `admin_tenant_users` + `0009`)
+
+The second dashboard's server side: five new Edge Functions, one
+migration, and a hard separation from the admin family — the stated
+requirement is that a tenant must NEVER be able to act as the admin
+(sudo) identity through the portal, in any way.
+
+### `migrations/0009_tenant_users.sql` — the membership table
+
+`tenant_users` is the ONLY bridge between Supabase Auth (`auth.users`,
+outside `public`) and tenant data:
+
+* `user_id` is UNIQUE → **one login = one tenant**, so session→tenant
+  resolution is deterministic (no tenant picker, nothing to exploit).
+* FKs to `tenants` and to `auth.users`, both `ON DELETE CASCADE`
+  (`drop_tenant()` needed no change — the RI cascade covers memberships).
+* `revoked_at` fails the login closed on its next request.
+* RLS enabled+forced, zero privileges for `anon`/`authenticated` — the
+  portal routes read it only through the service-role client inside the
+  functions (schema_audit stays green; A24 proves it).
+
+### The `tenant_*` family — every route is session-scoped
+
+| Route | What it does |
+|---|---|
+| `tenant_account` | whoami: the session's user + its ONE tenant + validated settings |
+| `tenant_keys` | issue (plaintext shown ONCE, `live`/`sandbox`), list, revoke — scoped to the session's tenant |
+| `tenant_usage` | the same aggregates the admin sees, but only for the session's tenant |
+| `tenant_catalog` | product browse + search preview over the session's tenant's catalog |
+
+Rules enforced by the shared guard (`_tenant/tenant.ts`):
+
+1. The bearer is a Supabase Auth JWT, verified server-side via GoTrue
+   `/user`; that auth user must have an active `tenant_users` row.
+2. **The tenant id comes ONLY from that membership row** — never from a
+   query parameter, body or header (P05/P06 prove a forged `tenant_id`
+   is ignored).
+3. Revoked row → 403, suspended tenant → 403, no membership → 403.
+4. Portal traffic is **not metered** — nothing lands in `usage_events` (P14).
+5. `TENANT_ALLOWED_ORIGINS` (local: `http://localhost:3001`) is a
+   SEPARATE CORS allowlist from `ADMIN_ALLOWED_ORIGINS` (3000) — P12
+   proves neither origin is echoed on the other family's routes.
+
+### `admin_tenant_users` — provisioning (admin side, ADMIN_TOKEN)
+
+* `GET ?tenant_id=` — list that tenant's portal logins
+* `POST {tenant_id, email, mode}` — `mode:"invite"` (GoTrue invite mail;
+  needs SMTP; failures come back with the GoTrue reason and a hint to
+  use `password` mode) or `mode:"password"` (admin-created login, a
+  generated temporary password returned EXACTLY ONCE — the same
+  show-once contract as API keys).
+* `PATCH {tenant_id, user_id, action}` — `revoke` / `reinstate` /
+  `delete` (`delete` removes the auth user; the membership row cascades).
+
+Password changes are done by the tenant themselves (the portal calls
+`supabase.auth.updateUser` with their own browser session).
+
+---
+
+## 11.12 The tenant portal — the APP (`../tenant-portal/`)
+
+A standalone Next.js project (same stack as the admin dashboard), one
+level up — NOT inside this folder, so the two dashboards are managed,
+versioned and deployed independently.
+
+Pages: `/login` (email + password via GoTrue), `/overview` (usage +
+month-to-date cost), `/keys` (issue/list/revoke, plaintext once),
+`/catalog` (their products), `/settings` (read-only config + password
+change). The browser talks ONLY to the `tenant_*` functions with the
+user's session JWT — no service key and no ADMIN_TOKEN anywhere in this
+app.
+
+### Run it locally
+
+```bash
+cd Cloth-Savvy-Pilot/Cloth-Savvy-Pilot-supabase
+supabase start                    # if not already running
+npx -y deno@2.1.4 run --allow-net --allow-env --allow-read tests/serve_local.ts 54431 &
+STUB_ENCODER_TOKEN=local-stub-encoder-token python tests/stub_encoder.py --port 8841 &
+cd ../tenant-portal && cp .env.example .env.local && npm install && npm run dev
+# → http://localhost:3001  (must match TENANT_ALLOWED_ORIGINS in supabase/functions/.env)
+#   login = a portal login you created from the ADMIN dashboard → tenant → Users tab
+```
+
+### Deploy it — HOSTED
+
+```bash
+cd ../tenant-portal && cp .env.example .env.local
+#   NEXT_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY=<project anon key>
+#   NEXT_PUBLIC_FUNCTIONS_URL=https://<your-project-ref>.supabase.co/functions/v1
+npm run build && npm run start    # or any static/Node host you choose
+```
+
+---
+
+## 11.13 The portal test suite (`tests/tenant_portal_tests.py`)
+
+14 end-to-end tests, same harness/stubs/PASS-FAIL table as the other
+suites. The ones that carry the separation requirement:
+
+| Test | Proves |
+|---|---|
+| P01 | `tenant_*` reject no/garbage/admin-token/sk_ credentials |
+| P08 | **sudo separation**: a portal session JWT is 401 on EVERY `admin_*` route; ADMIN_TOKEN is 401 on EVERY `tenant_*` route; an sk_ key is 401 on `tenant_*`; a portal session is 401 on the public API (11/11) |
+| P05/P06 | a forged `tenant_id` in query/body is ignored; tenant B sees none of A's data |
+| P09/P10 | revoke → 403 immediately, reinstate → 200, delete → the login is gone |
+| P11 | an auth user with no membership row gets 403 |
+| P12 | the portal (3001) and admin (3000) CORS allowlists are disjoint |
+| P13 | a suspended tenant is blocked from its own portal (403) |
+| P14 | portal traffic never touches `usage_events` |
+
+```bash
+python tests/tenant_portal_tests.py    # 14/14, exit 0
+python tests/admin_tests.py            # 12/12
+python tests/api_tests.py              # 26/26
+python tests/cleanup_test_tenants.py   # removes test_* tenants + the local key file
+```
+
+---
+
+## 11.14 Going LIVE — exact order of operations
+
+1. **Database** — run §2's order in the hosted SQL Editor, including
+   `0008_catalog_facets.sql` and `0009_tenant_users.sql`; the trailing
+   `schema_audit()` must show zero offenders.
+2. **Secrets** — §11.3 (`ENCODER_URL`, `ENCODER_AUTH_TOKEN`,
+   `GROQ_API_KEY`, `ALLOWED_ORIGINS`) plus, for the dashboards,
+   `ADMIN_TOKEN` (§11.10) and `TENANT_ALLOWED_ORIGINS` (the exact HTTPS
+   origin of the tenant portal).
+3. **Functions** — §11.4's four `admin_*` commands plus:
+   ```
+   supabase functions deploy admin_tenant_users --project-ref <ref>
+   supabase functions deploy tenant_account     --project-ref <ref>
+   supabase functions deploy tenant_keys        --project-ref <ref>
+   supabase functions deploy tenant_usage       --project-ref <ref>
+   supabase functions deploy tenant_catalog     --project-ref <ref>
+   ```
+4. **Dashboards** — deploy `../admin-dashboard` (your ops origin) and
+   `../tenant-portal` (the tenant-facing origin) on two DIFFERENT
+   origins; each `.env.local` holds only the public functions URL + the
+   anon key, and each origin is allowlisted ONLY in its own family's
+   CORS variable.
+5. **First tenant login** — §5 creates the pilot tenant; then the admin
+   dashboard → tenant → Users tab → create login (`password` mode to
+   hand over out-of-band, or `invite` once SMTP is configured).
+6. **Gate** — §4's hosted test run, then `python tests/live_smoke.py`
+   against the deployed API with a real sk_ key.

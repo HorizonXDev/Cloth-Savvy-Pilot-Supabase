@@ -1,8 +1,9 @@
 // _pilot/pilot.test.ts — unit tests for the pure _pilot logic.
 //
 // Run (no network, no permissions needed — every import is a relative file):
-//   npx -y deno@2.1.4 test supabase/functions/_pilot/pilot.test.ts
-//   (or plain `deno test ...` if Deno is installed)
+//   npx -y deno@2.1.4 run supabase/functions/_pilot/pilot.test.ts
+//   (or plain `deno run ...` if Deno is installed — this is a check()-
+//    style script; `deno test` discovers 0 tests and passes vacuously)
 //
 // Covered areas required by the brief: validation, recipe lookup,
 // assembly/dedupe, error mapping, key format. Local asserts only — no

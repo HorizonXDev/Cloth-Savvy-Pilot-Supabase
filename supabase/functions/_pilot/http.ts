@@ -42,6 +42,9 @@ export interface RouteOptions {
   endpoint: string;
   auth: boolean;
   methods: readonly string[];
+  /** Origin allowlist for THIS route; defaults to env.ALLOWED_ORIGINS.
+   * admin_* routes pass ADMIN_ALLOWED_ORIGINS (see _admin/admin.ts). */
+  corsOrigins?: readonly string[];
 }
 
 export async function handle(
@@ -52,13 +55,16 @@ export async function handle(
 ): Promise<Response> {
   const requestId = resolveRequestId(req);
   const origin = req.headers.get("Origin");
-  const cors = corsHeadersFor(env, origin); // null → not allowed / no Origin
+  const cors = corsHeadersFor(env, origin, opts.corsOrigins, opts.methods); // null → not allowed / no Origin
 
   // Preflight: answer from the allowlist only.
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: { ...corsHeadersFor(env, origin) ?? {}, "X-Request-Id": requestId },
+      headers: {
+        ...corsHeadersFor(env, origin, opts.corsOrigins, opts.methods) ?? {},
+        "X-Request-Id": requestId,
+      },
     });
   }
 

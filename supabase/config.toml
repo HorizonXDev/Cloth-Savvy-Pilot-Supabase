@@ -446,3 +446,46 @@ verify_jwt = false
 [functions.combos]
 enabled = true
 verify_jwt = false
+
+# Admin dashboard functions (dashboard/): authenticated with the shared
+# ADMIN_TOKEN bearer inside the function — never an sk_ key, never a user
+# JWT, hence verify_jwt=false like the public routes.
+[functions.admin_tenants]
+enabled = true
+verify_jwt = false
+
+[functions.admin_keys]
+enabled = true
+verify_jwt = false
+
+[functions.admin_usage]
+enabled = true
+verify_jwt = false
+
+[functions.admin_catalog]
+enabled = true
+verify_jwt = false
+
+[functions.admin_tenant_users]
+enabled = true
+verify_jwt = false
+
+# Portal (tenant-*) functions: verify_jwt=false because auth happens INSIDE
+# each function (resolvePortalSession validates the Supabase Auth user JWT
+# against GoTrue, then resolves the tenant from tenant_users — see
+# _tenant/tenant.ts). Same in-function-auth pattern as every other route.
+[functions.tenant_account]
+enabled = true
+verify_jwt = false
+
+[functions.tenant_keys]
+enabled = true
+verify_jwt = false
+
+[functions.tenant_usage]
+enabled = true
+verify_jwt = false
+
+[functions.tenant_catalog]
+enabled = true
+verify_jwt = false
