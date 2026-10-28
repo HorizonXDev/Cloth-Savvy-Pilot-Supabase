@@ -58,6 +58,7 @@ from api_tests import (  # noqa: E402 - shared harness/stub helpers
     kill_proc_tree,
     load_dotenv_if_present,
     record,
+    seed_products_via_job,
     require_config,
     stub_config,
 )
@@ -312,27 +313,23 @@ def p05_usage_and_forged_tenant():
 
 
 def p06_catalog_scoping():
-    # import 2 products into A (admin side, stub encoder)
+    # seed 2 products for A through the OWNER pipeline: queue -> vectors -> merge
     rows = [
         {"external_id": "PRT-1", "title": "Indigo block print kurta", "section": "top",
-         "category": "top", "colors": ["blue"], "price": 1299.0},
+         "category": "top", "colors": ["blue"], "price": 1299.0,
+         "image_url": "https://cdn.invalid/prt1.jpg"},
         {"external_id": "PRT-2", "title": "Gold zari saree", "section": "saree",
-         "category": "saree", "colors": ["gold"], "price": 8999.0},
+         "category": "saree", "colors": ["gold"], "price": 8999.0,
+         "image_url": "https://cdn.invalid/prt2.jpg"},
     ]
-    st, parsed, _, _ = admin(fx.fns, fx.adm, "POST", "/admin_catalog",
-                             body={"op": "import_start", "tenant_id": fx.tid_a,
-                                   "rows_total": len(rows)})
-    if st != 201:
+    try:
+        seeded = seed_products_via_job(fx.base, fx.svc, fx.fns, fx.adm, fx.tid_a,
+                                       rows, source="p06.csv")
+    except TestError as e:
         record("P06 catalog scoped to session tenant (A sees, B doesn't)", False,
-               f"import_start={st}")
+               f"seed failed: {e}")
         return
-    run_id = parsed["run"]["id"]
-    st2, _, _, _ = admin(fx.fns, fx.adm, "POST", "/admin_catalog",
-                         body={"op": "import_batch", "tenant_id": fx.tid_a,
-                               "run_id": run_id, "rows": rows})
-    admin(fx.fns, fx.adm, "POST", "/admin_catalog",
-          body={"op": "import_finish", "tenant_id": fx.tid_a, "run_id": run_id,
-                "status": "done"})
+    st2 = 200 if (seeded or {}).get("counts", {}).get("merged") == 2 else -1
 
     # session A browse
     sta, pa, _, _ = portal(fx.fns, fx.tok_a, "GET", "/tenant_catalog?op=products")
@@ -350,7 +347,7 @@ def p06_catalog_scoping():
     ok = (st2 == 200 and sta == 200 and a_total == 2
           and forged_total == 2 and stb == 200 and b_total == 0)
     record("P06 catalog scoped to session tenant (A sees, B doesn't)", ok,
-           f"import={st2} A={a_total} forged={forged_total} B={b_total}")
+           f"seed={st2} A={a_total} forged={forged_total} B={b_total}")
 
 
 def p07_session_b_gets_own_account():

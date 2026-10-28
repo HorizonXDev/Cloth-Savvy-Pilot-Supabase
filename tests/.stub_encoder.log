@@ -214,3 +214,607 @@ ConnectionAbortedError: [WinError 10053] An established connection was aborted b
 [stub_encoder] ARRIVAL #27 t=18:20:52 fail=0 delay=0.0
 [stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=18:20:52
 [stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=18:20:53
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=20:11:38
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=20:12:12
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=20:12:12
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=20:12:12
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=20:12:12
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=20:12:13
+[stub_encoder] ARRIVAL #28 t=20:12:41 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:12:41
+[stub_encoder] ARRIVAL #29 t=20:12:44 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:12:44
+[stub_encoder] ARRIVAL #30 t=20:12:49 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:12:49
+[stub_encoder] ARRIVAL #31 t=20:12:50 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:12:50
+[stub_encoder] ARRIVAL #32 t=20:12:52 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:12:52
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=20:12:57
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=20:13:02
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=20:13:06
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=20:13:06
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=20:13:06
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=20:13:06
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=20:13:06
+[stub_encoder] ARRIVAL #33 t=20:13:43 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:13:43
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=20:14:26
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=20:14:32
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=20:14:32
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=20:14:32
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=20:14:33
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=20:14:41
+[stub_encoder] ARRIVAL #34 t=20:14:45 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:14:45
+[stub_encoder] ARRIVAL #35 t=20:14:48 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:14:48
+[stub_encoder] ARRIVAL #36 t=20:14:51 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:14:51
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=20:14:51
+[stub_encoder] ARRIVAL #37 t=20:14:54 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:14:54
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=20:14:54
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=20:14:54
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=20:14:54
+[stub_encoder] ARRIVAL #38 t=20:14:56 fail=500 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 500 - t=20:14:56
+[stub_encoder] ARRIVAL #39 t=20:14:56 fail=500 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 500 - t=20:14:56
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=20:14:56
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=20:14:56
+[stub_encoder] ARRIVAL #40 t=20:15:05 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:15:05
+[stub_encoder] ARRIVAL #41 t=20:15:09 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:15:09
+[stub_encoder] ARRIVAL #42 t=20:15:13 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:15:13
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=20:15:14
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=20:15:14
+[stub_encoder] ARRIVAL #43 t=20:15:16 fail=0 delay=12.0
+[stub_encoder] ARRIVAL #44 t=20:15:26 fail=0 delay=12.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:15:28
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 54069)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 488, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 184, in do_POST
+    self._send(200, {
+    ~~~~~~~~~~^^^^^^^
+        "model": cfg["model"], "revision": cfg["revision"], "dim": DIM,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "embeddings": embeddings, "server_ms": round(server_ms, 3),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    })
+    ^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 89, in _send
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+----------------------------------------
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=20:15:37
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=20:15:37
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:15:38
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 62797)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 500, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 488, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 184, in do_POST
+    self._send(200, {
+    ~~~~~~~~~~^^^^^^^
+        "model": cfg["model"], "revision": cfg["revision"], "dim": DIM,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "embeddings": embeddings, "server_ms": round(server_ms, 3),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    })
+    ^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 89, in _send
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+----------------------------------------
+[stub_encoder] ARRIVAL #45 t=20:15:51 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:15:51
+[stub_encoder] ARRIVAL #46 t=20:15:57 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:15:57
+[stub_encoder] ARRIVAL #47 t=20:16:14 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:16:14
+[stub_encoder] ARRIVAL #48 t=20:16:17 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:16:17
+[stub_encoder] ARRIVAL #49 t=20:16:24 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=20:16:24
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=20:16:25
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:42:22
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:42:22
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:42:22
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:42:22
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:42:24
+[stub_encoder] ARRIVAL #50 t=22:42:58 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:42:58
+[stub_encoder] ARRIVAL #51 t=22:42:59 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:42:59
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:43:04
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:43:09
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:45:51
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:45:51
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:46:01
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:50:19
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:50:19
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:50:19
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:50:19
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:50:19
+[stub_encoder] ARRIVAL #52 t=22:50:44 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:50:44
+[stub_encoder] ARRIVAL #53 t=22:50:45 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:50:45
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:50:51
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:50:55
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 49975)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:52:04
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:52:04
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:52:04
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:52:04
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:52:04
+[stub_encoder] ARRIVAL #54 t=22:52:05 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:05
+[stub_encoder] ARRIVAL #55 t=22:52:05 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:05
+[stub_encoder] ARRIVAL #56 t=22:52:05 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:05
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:52:05
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:52:05
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 53659)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:52:09
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:52:09
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:52:09
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:52:09
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:52:09
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:52:12
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 53738)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:52:16
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] ARRIVAL #57 t=22:52:17 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] ARRIVAL #58 t=22:52:17 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] ARRIVAL #59 t=22:52:17 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] ARRIVAL #60 t=22:52:17 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] ARRIVAL #61 t=22:52:17 fail=500 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 500 - t=22:52:17
+[stub_encoder] ARRIVAL #62 t=22:52:17 fail=500 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 500 - t=22:52:17
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] ARRIVAL #63 t=22:52:17 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] ARRIVAL #64 t=22:52:17 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] ARRIVAL #65 t=22:52:17 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:52:17
+[stub_encoder] ARRIVAL #66 t=22:52:17 fail=0 delay=12.0
+[stub_encoder] ARRIVAL #67 t=22:52:27 fail=0 delay=12.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:29
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 53840)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 488, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 184, in do_POST
+    self._send(200, {
+    ~~~~~~~~~~^^^^^^^
+        "model": cfg["model"], "revision": cfg["revision"], "dim": DIM,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "embeddings": embeddings, "server_ms": round(server_ms, 3),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    })
+    ^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 89, in _send
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+----------------------------------------
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:52:37
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=22:52:37
+[stub_encoder] ARRIVAL #68 t=22:52:38 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:38
+[stub_encoder] ARRIVAL #69 t=22:52:38 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:38
+[stub_encoder] ARRIVAL #70 t=22:52:38 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:38
+[stub_encoder] ARRIVAL #71 t=22:52:38 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:38
+[stub_encoder] ARRIVAL #72 t=22:52:38 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:38
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=22:52:38
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 53925)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=22:52:39
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 53909)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 500, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 488, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 184, in do_POST
+    self._send(200, {
+    ~~~~~~~~~~^^^^^^^
+        "model": cfg["model"], "revision": cfg["revision"], "dim": DIM,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "embeddings": embeddings, "server_ms": round(server_ms, 3),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    })
+    ^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 89, in _send
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+----------------------------------------
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=23:06:20
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=23:06:20
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=23:06:20
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=23:06:20
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=23:06:20
+[stub_encoder] ARRIVAL #73 t=23:06:21 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:21
+[stub_encoder] ARRIVAL #74 t=23:06:21 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:21
+[stub_encoder] ARRIVAL #75 t=23:06:21 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:21
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=23:06:21
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=23:06:21
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 60925)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=23:06:25
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=23:06:25
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=23:06:25
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=23:06:25
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=23:06:25
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=23:06:28
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 60439)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=23:06:32
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=23:06:32
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=23:06:32
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=23:06:32
+[stub_encoder] 127.0.0.1 "GET /health HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] ARRIVAL #76 t=23:06:33 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] ARRIVAL #77 t=23:06:33 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] ARRIVAL #78 t=23:06:33 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] ARRIVAL #79 t=23:06:33 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] ARRIVAL #80 t=23:06:33 fail=500 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 500 - t=23:06:33
+[stub_encoder] ARRIVAL #81 t=23:06:33 fail=500 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 500 - t=23:06:33
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] ARRIVAL #82 t=23:06:33 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] ARRIVAL #83 t=23:06:33 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] ARRIVAL #84 t=23:06:33 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=23:06:33
+[stub_encoder] ARRIVAL #85 t=23:06:33 fail=0 delay=12.0
+[stub_encoder] ARRIVAL #86 t=23:06:43 fail=0 delay=12.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:45
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 58768)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 488, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 184, in do_POST
+    self._send(200, {
+    ~~~~~~~~~~^^^^^^^
+        "model": cfg["model"], "revision": cfg["revision"], "dim": DIM,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "embeddings": embeddings, "server_ms": round(server_ms, 3),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    })
+    ^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 89, in _send
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+----------------------------------------
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=23:06:53
+[stub_encoder] 127.0.0.1 "GET /__stub/stats HTTP/1.1" 200 - t=23:06:53
+[stub_encoder] ARRIVAL #87 t=23:06:53 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:53
+[stub_encoder] ARRIVAL #88 t=23:06:53 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:53
+[stub_encoder] ARRIVAL #89 t=23:06:54 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:54
+[stub_encoder] ARRIVAL #90 t=23:06:54 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:54
+[stub_encoder] ARRIVAL #91 t=23:06:54 fail=0 delay=0.0
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:54
+[stub_encoder] 127.0.0.1 "POST /__stub/config HTTP/1.1" 200 - t=23:06:54
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 62822)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[stub_encoder] 127.0.0.1 "POST /embed_texts HTTP/1.1" 200 - t=23:06:55
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 50065)
+Traceback (most recent call last):
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 500, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 488, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 184, in do_POST
+    self._send(200, {
+    ~~~~~~~~~~^^^^^^^
+        "model": cfg["model"], "revision": cfg["revision"], "dim": DIM,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "embeddings": embeddings, "server_ms": round(server_ms, 3),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    })
+    ^^
+  File "D:\Desktop\Coding\Cloth-Savvy-Parent\Cloth-Savvy-Pilot\Cloth-Savvy-Pilot-supabase\tests\stub_encoder.py", line 89, in _send
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Horizon\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+----------------------------------------

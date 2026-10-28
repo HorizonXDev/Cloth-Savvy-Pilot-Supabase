@@ -1,33 +1,41 @@
 // functions/admin_catalog — dashboard catalog administration + QA.
 //
-//   GET  ?op=products&tenant_id=…[&section=&status=&q=&page=&page_size=]
+//   GET  ?op=products&tenant_id=...[&section=&status=&q=&page=&page_size=]
 //        paginated product browse (no embeddings in the payload)
-//   GET  ?op=runs&tenant_id=…           recent ingestion_runs
-//   GET  ?op=health                     db ping + encoder relay (admin view)
-//   POST {op:"search", …}               search preview on any tenant: embed
-//        the typed query with the real encoder, run search_products, show
-//        similarity-ranked results — exactly what a tenant's callers see.
-//   POST {op:"import_start", tenant_id, rows_total, notes?}
-//        open an ingestion_runs row (status "running")
-//   POST {op:"import_batch", tenant_id, run_id, rows:[…1..50]}
-//        embed + insert one batch; per-row failures are returned AND counted
-//        (rows_ok/rows_failed) — never a silent drop. ALL texts are embedded
-//        BEFORE any insert so an encoder 503 leaves the batch untouched and
-//        cleanly retryable.
-//   POST {op:"import_finish", tenant_id, run_id, status:"done"|"failed", notes?}
-//   POST {op:"set_status", tenant_id, product_ids:[…1..100], status:"active"|"archived"}
+//   GET  ?op=runs&tenant_id=...            recent ingestion_runs
+//   GET  ?op=health                      db ping + encoder relay (admin view)
+//   GET  ?op=staging&tenant_id=[&status=&limit=&offset=]
+//        the tenant's upload queue, read-only
+//   GET  ?op=embed_export&tenant_id=[&limit=&offset=]
+//        THE PIPELINE INPUT: everything that still needs an IMAGE vector —
+//        queued staging rows plus live products whose image_url changed
+//        (needs_reembed) — as {external_id, image_url, title, section,
+//        reason}. Paging: two independent windows, client loops the offset
+//        until it has collected `total` rows.
+//   POST {op:"search", ...}               search preview on any tenant: embed
+//        the typed QUERY with the real encoder, run search_products, show
+//        similarity-ranked results. (Query is text; catalog vectors are
+//        images — CLIP's towers share one 512-d space, which is why this
+//        cosine works.)
+//   POST {op:"embeddings_merge", tenant_id, rows:[...1..500], source?}
+//        the owner's generated vectors, applied BY ID. Each row is
+//        {external_id, embedding:[512 finite numbers]}. A match against a
+//        queued staging row upserts `products` from the staged payload plus
+//        that vector and marks the row merged; a match against a product
+//        flagged needs_reembed just swaps the vector and clears the flag.
+//        Bad rows come back in `skipped` with the reason — never a silent
+//        drop. Re-uploading the same file is safe (upsert). When `source`
+//        (the filename) is supplied an ingestion_runs row records the merge
+//        so the tenant's history tells the same story you see here.
+//   POST {op:"set_status", tenant_id, product_ids:[...1..100], status:"active"|"archived"}
 //
-// Import row shape (unknown fields ignored):
-//   {external_id*, title*, section* (pilot section enum), category?, gender?,
-//    colors? [≤10], price?, in_stock?, product_url?, image_url?,
-//    attributes? object ≤4KB, status? "active"|"archived"}
-// Products are inserted with source:"csv" and the TENANT's embedding_model
-// (the products_guard trigger enforces the match); the embedding is the
-// FashionCLIP text embedding of "title + category + colors" — the same
-// vector space search_products queries. Auth: shared ADMIN_TOKEN bearer.
+// Text is NEVER embedded into the catalog (owner decision, 2026-10-26):
+// title / category / colours / section / price are SQL filters only, and the
+// old import_* text-embedding ops left with the admin upload UI. Products
+// land with source:"csv" and the TENANT's embedding_model (products_guard
+// enforces the match). Auth: shared ADMIN_TOKEN bearer.
 
 import { encoderHealth, embedTexts } from "../_pilot/encoder.ts";
-import { parseImportRow as parseImportRowShared, type ParsedRow } from "../_pilot/import_row.ts";
 import { readEnv } from "../_pilot/env.ts";
 import { PilotError } from "../_pilot/errors.ts";
 import { handle } from "../_pilot/http.ts";
@@ -46,36 +54,12 @@ import {
 import { adminOrigins, getTenant, requireUuid, verifyAdmin } from "../_admin/admin.ts";
 
 const PRODUCT_COLUMNS =
-  "id,external_id,title,section,category,gender,colors,price,in_stock,product_url,image_url,status,source,attributes,created_at,updated_at";
-const IMPORT_BATCH_MAX = 50;
-const EMBED_CHUNK = 8; // encoder batch limit
-
-/** Validate one import row. Throws PilotError invalid_request with a precise
- * reason — the caller turns that into a per-row failure entry.
- *
- * The RULES live in _pilot/import_row.ts so the tenant portal's staging path
- * validates identically (2026-10-26); only the error class differs. */
-function parseImportRow(raw: unknown, index: number): ParsedRow {
-  const fail = (why: string): never => {
-    throw new PilotError("invalid_request", `row ${index}: ${why}`);
-  };
-  return parseImportRowShared(raw, index, fail);
-}
+  "id,external_id,title,section,category,gender,colors,price,in_stock,product_url,image_url,status,source,attributes,needs_reembed,created_at,updated_at";
+const MERGE_MAX = 500; // rows accepted per embeddings_merge call
+const VECTOR_DIM = 512; // matches p_embedding_dim and the encoder output
 
 function escapeIlike(q: string): string {
   return q.replace(/([\\%_])/g, "\\$1");
-}
-
-/** Map a per-row Postgres failure to a short admin-facing reason. */
-function rowErrorReason(err: { code?: string; message?: string } | null): string {
-  const code = err?.code ?? "unknown";
-  if (code === "23505") return "duplicate external_id (already imported for this tenant)";
-  if (code === "23514") {
-    const m = (err?.message ?? "").replace(/\s+/g, " ").slice(0, 160);
-    return `rejected by a database check: ${m || "check constraint"}`;
-  }
-  if (code === "23503") return "foreign-key violation (tenant missing?)";
-  return `database error ${code}`;
 }
 
 Deno.serve((req) =>
@@ -152,8 +136,66 @@ Deno.serve((req) =>
           return { body: { request_id: ctx.requestId, rows: rows2.data ?? [], total: rows2.count ?? 0 } };
         }
 
+        if (op === "embed_export") {
+          // Everything that still needs an IMAGE vector, as the pipeline's
+          // id->url table. Rows with no image_url are returned anyway (with
+          // image_url null) so the dashboard can name them instead of
+          // silently dropping them from the file.
+          const offset = optInt({ offset: Number(url.searchParams.get("offset") ?? "0") }, "offset", { min: 0, max: 1000000 })!;
+          const limit = optInt({ limit: Number(url.searchParams.get("limit") ?? "500") }, "limit", { min: 1, max: 500 })!;
+
+          const st = await ctx.db
+            .from("catalog_staging")
+            .select("external_id,payload,status,error", { count: "exact" })
+            .eq("tenant_id", tenantId)
+            .in("status", ["pending", "failed"])
+            .order("created_at", { ascending: true })
+            .range(offset, offset + limit - 1);
+          if (st.error) throw mapDbError(st.error, ctx.requestId, "catalog_staging.export");
+
+          const pf = await ctx.db
+            .from("products")
+            .select("external_id,title,section,image_url", { count: "exact" })
+            .eq("tenant_id", tenantId)
+            .eq("needs_reembed", true)
+            .order("updated_at", { ascending: true })
+            .range(offset, offset + limit - 1);
+          if (pf.error) throw mapDbError(pf.error, ctx.requestId, "products.export");
+
+          const rows = [
+            ...(st.data ?? []).map((r) => {
+              const p = (r.payload ?? {}) as Record<string, unknown>;
+              return {
+                external_id: r.external_id,
+                image_url: typeof p.image_url === "string" && p.image_url !== "" ? p.image_url : null,
+                title: typeof p.title === "string" ? p.title : null,
+                section: typeof p.section === "string" ? p.section : null,
+                reason: r.status === "failed" ? `queue: ${r.error ?? "failed"}` : "queued",
+              };
+            }),
+            ...(pf.data ?? []).map((r) => ({
+              external_id: r.external_id,
+              image_url: r.image_url ?? null,
+              title: r.title,
+              section: r.section,
+              reason: "image changed",
+            })),
+          ];
+
+          return {
+            body: {
+              request_id: ctx.requestId,
+              rows,
+              total: (st.count ?? 0) + (pf.count ?? 0),
+              no_image_url: rows.filter((r) => r.image_url === null).length,
+              offset,
+              limit,
+            },
+          };
+        }
+
         if (op !== "products") {
-          throw new PilotError("invalid_request", "op must be one of: products, runs, health, staging");
+          throw new PilotError("invalid_request", "op must be one of: products, runs, health, staging, embed_export");
         }
 
         const page = optInt({ page: Number(url.searchParams.get("page") ?? "0") }, "page", { min: 0, max: 100000 })!;
@@ -255,143 +297,171 @@ Deno.serve((req) =>
         };
       }
 
-      // ---- ingestion ------------------------------------------------------
-      if (op === "import_start") {
-        const rowsTotal = optInt(body, "rows_total", { required: true, min: 0, max: 1000000 })!;
-        const notes = body.notes === undefined || body.notes === null
-          ? null
-          : optString(body, "notes", { max: 1000 }) ?? null;
-        const { data: run, error } = await ctx.db
-          .from("ingestion_runs")
-          .insert({ tenant_id: tenantId, status: "running", rows_total: rowsTotal, notes })
-          .select("id,status,rows_total,rows_ok,rows_failed,started_at,finished_at,notes")
-          .single();
-        if (error) throw mapDbError(error, ctx.requestId, "ingestion_runs.insert");
-        return { status: 201, body: { request_id: ctx.requestId, run } };
-      }
-
-      if (op === "import_batch") {
-        const runId = requireUuid(body.run_id, "run_id");
+      // ---- the owner's vectors, applied BY ID -----------------------------
+      if (op === "embeddings_merge") {
         const rawRows = body.rows;
-        if (!Array.isArray(rawRows) || rawRows.length < 1 || rawRows.length > IMPORT_BATCH_MAX) {
-          throw new PilotError("invalid_request", `rows must be an array of 1..${IMPORT_BATCH_MAX} rows`);
+        if (!Array.isArray(rawRows) || rawRows.length < 1 || rawRows.length > MERGE_MAX) {
+          throw new PilotError("invalid_request", `rows must be an array of 1..${MERGE_MAX}`);
         }
+        const source = body.source === undefined || body.source === null
+          ? null
+          : optString(body, "source", { max: 200 }) ?? null;
 
-        const { data: run, error: runErr } = await ctx.db
-          .from("ingestion_runs")
-          .select("id,status,rows_ok,rows_failed")
-          .eq("id", runId)
-          .eq("tenant_id", tenantId)
-          .maybeSingle();
-        if (runErr) throw mapDbError(runErr, ctx.requestId, "ingestion_runs.select");
-        if (!run) throw new PilotError("invalid_request", "no ingestion run with that id for this tenant");
-        if (run.status !== "running") {
-          throw new PilotError("invalid_request", `run is '${run.status}', not 'running' — start a new run`);
-        }
+        const merged: string[] = [];
+        const skipped: Array<{ external_id: string | null; reason: string }> = [];
 
-        // 1. Validate every row; failures are collected, never silently dropped.
-        const failed: Array<{ index: number; external_id: string | null; reason: string }> = [];
-        const valid: ParsedRow[] = [];
-        rawRows.forEach((raw, i) => {
-          try {
-            valid.push(parseImportRow(raw, i));
-          } catch (e) {
-            const reason = e instanceof PilotError ? e.message : "row could not be parsed";
-            const ext = (typeof raw === "object" && raw !== null && typeof (raw as Record<string, unknown>).external_id === "string")
-              ? (raw as Record<string, unknown>).external_id as string
-              : null;
-            failed.push({ index: i, external_id: ext, reason });
+        for (const raw of rawRows) {
+          const rec = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+          const ext = typeof rec.external_id === "string" && rec.external_id.trim() !== ""
+            ? rec.external_id.trim()
+            : null;
+          if (!ext) {
+            skipped.push({ external_id: null, reason: "missing external_id" });
+            continue;
           }
-        });
-
-        // 2. Embed ALL valid texts FIRST (chunked to the encoder's batch cap).
-        //    If the encoder fails we 503 with nothing inserted — the batch is
-        //    cleanly retryable and no counters moved (honesty over progress).
-        let embeddings: number[][] = [];
-        if (valid.length > 0) {
-          const vectors: number[][] = [];
-          for (let i = 0; i < valid.length; i += EMBED_CHUNK) {
-            const chunk = valid.slice(i, i + EMBED_CHUNK).map((r) => r.embedText);
-            const res = await embedTexts(ctx.env, chunk, tenant.embedding_model);
-            vectors.push(...res.embeddings);
-          }
-          embeddings = vectors;
-        }
-
-        // 3. Insert row by row; per-row DB failures are reported + counted.
-        const inserted: string[] = [];
-        let ok = 0;
-        try {
-          for (let i = 0; i < valid.length; i++) {
-            const r = valid[i];
-            const { error: insErr } = await ctx.db.from("products").insert({
-              tenant_id: tenantId,
-              external_id: r.external_id,
-              title: r.title,
-              section: r.section,
-              category: r.category,
-              gender: r.gender,
-              colors: r.colors,
-              price: r.price,
-              in_stock: r.in_stock,
-              product_url: r.product_url,
-              image_url: r.image_url,
-              attributes: r.attributes,
-              embedding: JSON.stringify(embeddings[i]),
-              embedding_model: tenant.embedding_model,
-              status: r.status,
-              source: "csv",
+          const vec = rec.embedding as unknown;
+          if (
+            !Array.isArray(vec) ||
+            vec.length !== VECTOR_DIM ||
+            !vec.every((n) => typeof n === "number" && Number.isFinite(n))
+          ) {
+            skipped.push({
+              external_id: ext,
+              reason: `embedding must be ${VECTOR_DIM} finite numbers (got ${
+                Array.isArray(vec) ? `${vec.length} values` : typeof vec
+              })`,
             });
-            if (insErr) {
-              failed.push({ index: i, external_id: r.external_id, reason: rowErrorReason(insErr) });
+            continue;
+          }
+          const vector = JSON.stringify(vec);
+
+          try {
+            // 1. a queued row for this id, if one exists
+            const st = await ctx.db
+              .from("catalog_staging")
+              .select("id,payload")
+              .eq("tenant_id", tenantId)
+              .eq("external_id", ext)
+              .in("status", ["pending", "failed"])
+              .order("created_at", { ascending: false })
+              .limit(1);
+            if (st.error) throw st.error;
+            const stage = (st.data ?? [])[0];
+
+            // 2. a product already carrying this id for this tenant
+            const ex = await ctx.db
+              .from("products")
+              .select("id")
+              .eq("tenant_id", tenantId)
+              .eq("external_id", ext)
+              .limit(1);
+            if (ex.error) throw ex.error;
+            const existing = (ex.data ?? [])[0];
+
+            let productId = existing?.id as string | undefined;
+
+            if (stage) {
+              // staged payload passed the shared validator on upload, so the
+              // columns below are present and well-formed by construction.
+              const p = (stage.payload ?? {}) as Record<string, unknown>;
+              const fields = {
+                title: p.title as string,
+                section: p.section as string,
+                category: (p.category as string | null) ?? null,
+                gender: (p.gender as string | null) ?? null,
+                colors: Array.isArray(p.colors) ? (p.colors as string[]) : [],
+                price: p.price === null || p.price === undefined ? null : Number(p.price),
+                in_stock: p.in_stock !== false,
+                product_url: (p.product_url as string | null) ?? null,
+                image_url: (p.image_url as string | null) ?? null,
+                attributes: (p.attributes as Record<string, unknown>) ?? {},
+                status: p.status === "archived" ? "archived" : "active",
+                embedding: vector,
+                embedding_model: tenant.embedding_model,
+                needs_reembed: false,
+              };
+              if (existing) {
+                const up = await ctx.db
+                  .from("products")
+                  .update(fields)
+                  .eq("id", existing.id)
+                  .eq("tenant_id", tenantId) // SCOPING
+                  .select("id");
+                if (up.error) throw up.error;
+              } else {
+                const ins = await ctx.db
+                  .from("products")
+                  .insert({ tenant_id: tenantId, external_id: ext, source: "csv", ...fields })
+                  .select("id");
+                if (ins.error) throw ins.error;
+                productId = (ins.data ?? [])[0]?.id;
+              }
+
+              const mark = await ctx.db
+                .from("catalog_staging")
+                .update({
+                  status: "merged",
+                  product_id: productId ?? null,
+                  error: null,
+                  merged_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", stage.id)
+                .eq("tenant_id", tenantId); // SCOPING
+              if (mark.error) throw mark.error;
+            } else if (existing) {
+              // no queue entry: this is a needs_reembed (or re-upload) swap
+              const up = await ctx.db
+                .from("products")
+                .update({
+                  embedding: vector,
+                  embedding_model: tenant.embedding_model,
+                  needs_reembed: false,
+                })
+                .eq("id", existing.id)
+                .eq("tenant_id", tenantId) // SCOPING
+                .select("id");
+              if (up.error) throw up.error;
             } else {
-              inserted.push(r.external_id);
-              ok++;
+              skipped.push({
+                external_id: ext,
+                reason: "no queued row and no product with that external_id for this tenant",
+              });
+              continue;
             }
+
+            merged.push(ext);
+          } catch (e) {
+            skipped.push({
+              external_id: ext,
+              reason: e instanceof Error ? e.message.slice(0, 200) : "database error",
+            });
           }
-        } finally {
-          // 4. Whatever happened above, the run counters reflect reality.
-          if (ok > 0 || failed.length > 0) {
-            const nextOk = (run.rows_ok ?? 0) + ok;
-            const nextFailed = (run.rows_failed ?? 0) + failed.length;
-            const { error: cntErr } = await ctx.db
-              .from("ingestion_runs")
-              .update({ rows_ok: nextOk, rows_failed: nextFailed })
-              .eq("id", runId);
-            if (cntErr) throw mapDbError(cntErr, ctx.requestId, "ingestion_runs.counters");
-          }
+        }
+
+        // record the merge in the tenant's own history when a filename came in
+        if (source) {
+          const { error: runErr } = await ctx.db.from("ingestion_runs").insert({
+            tenant_id: tenantId,
+            status: "done",
+            rows_total: rawRows.length,
+            rows_ok: merged.length,
+            rows_failed: skipped.length,
+            finished_at: new Date().toISOString(),
+            notes: `${source} (embeddings merged)`,
+          });
+          if (runErr) throw mapDbError(runErr, ctx.requestId, "ingestion_runs.insert");
         }
 
         return {
           body: {
             request_id: ctx.requestId,
-            batch: { ok, failed: failed.length },
-            inserted,
-            failed,
+            merged,
+            skipped,
+            counts: { submitted: rawRows.length, merged: merged.length, skipped: skipped.length },
+            ...(source ? { source } : {}),
           },
         };
-      }
-
-      if (op === "import_finish") {
-        const runId = requireUuid(body.run_id, "run_id");
-        const status = optString(body, "status", { required: true, values: ["done", "failed"] })!;
-        const notes = body.notes === undefined || body.notes === null
-          ? undefined
-          : optString(body, "notes", { max: 1000 });
-        const { data: run, error } = await ctx.db
-          .from("ingestion_runs")
-          .update({
-            status,
-            finished_at: new Date().toISOString(),
-            ...(notes !== undefined ? { notes } : {}),
-          })
-          .eq("id", runId)
-          .eq("tenant_id", tenantId)
-          .select("id,status,rows_total,rows_ok,rows_failed,started_at,finished_at,notes")
-          .maybeSingle();
-        if (error) throw mapDbError(error, ctx.requestId, "ingestion_runs.finish");
-        if (!run) throw new PilotError("invalid_request", "no ingestion run with that id for this tenant");
-        return { body: { request_id: ctx.requestId, run } };
       }
 
       // ---- set_status (archive / unarchive) ------------------------------
@@ -421,7 +491,7 @@ Deno.serve((req) =>
 
       throw new PilotError(
         "invalid_request",
-        "op must be one of: search, import_start, import_batch, import_finish, set_status",
+        "op must be one of: search, embeddings_merge, set_status",
       );
     },
   ),

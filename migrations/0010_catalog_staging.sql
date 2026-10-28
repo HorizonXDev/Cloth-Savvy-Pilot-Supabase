@@ -6,10 +6,15 @@
 -- upload / edit / archive / delete all happen in the tenant portal. The owner
 -- never hand-edits a catalogue; their step starts when rows land here:
 --
---     tenant uploads CSV  ->  catalog_staging (pending, NO embedding)
---     owner runs tools/merge_staging.py
---                         ->  embeds title+category+colors via the encoder
---                         ->  inserts into products, marks the row merged
+--     tenant uploads CSV  ->  catalog_staging (pending, NO vector)
+--     owner downloads the id->url table (admin ?op=embed_export)
+--                         ->  runs FashionCLIP over the IMAGES (their Colab)
+--                         ->  uploads the generated file to the admin
+--                             dashboard, applied BY ID (?op=embeddings_merge)
+--                         ->  products, row marked merged
+--   Text (title / category / colours / section / price) is FILTERING ONLY —
+--   it is never embedded. Search embeds the shopper's QUERY (CLIP text
+--   tower), which shares the joint space with those image vectors.
 --
 -- Why a staging table and not `products` directly:
 --   * products.embedding_model is guarded and every row must belong to the

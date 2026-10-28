@@ -18,13 +18,15 @@
 // OWNERSHIP DECISION (2026-10-26): catalog mutation belongs to the tenant.
 // Upload / edit / archive / delete all happen HERE; the admin dashboard keeps
 // oversight (it can read everything) but no longer uploads. The owner's step
-// starts after staging: they run tools/merge_staging.py, which embeds the
-// queued rows and merges them into `products`.
+// starts after staging: they export the id->url table from the admin
+// dashboard, run their FashionCLIP image pipeline over it (Colab), and upload
+// the generated vectors back — applied BY ID to these rows.
 //
-//   CSV upload  -> catalog_staging (pending, no embedding yet)
-//   owner merges -> products (embedding from the project encoder)
-//   product edit of searchable text re-embeds IMMEDIATELY (one encoder call),
-//   so a one-field fix is never stuck behind a manual pipeline run.
+//   CSV upload   -> catalog_staging (pending, no vector yet)
+//   owner merges -> products (IMAGE vector, applied by external_id)
+//   text edits NEVER produce vectors: title / category / colours / section /
+//   price are FILTERS ONLY. Changing image_url flags needs_reembed so the row
+//   appears in the owner's next export instead of keeping a stale vector.
 //
 // SEPARATION: the tenant_id is the SESSION's — never a query parameter, never
 // a body field (T15 at the portal layer). There is no admin code path here:
@@ -34,22 +36,20 @@
 // Auth: portal session. Portal traffic is NOT metered (browsing your own
 // catalogue must not consume API quota).
 
-import { embedTexts } from "../_pilot/encoder.ts";
 import { readEnv } from "../_pilot/env.ts";
 import { PilotError } from "../_pilot/errors.ts";
 import { handle } from "../_pilot/http.ts";
-import { embedTextFor, parseImportRow, type ParsedRow } from "../_pilot/import_row.ts";
+import { parseImportRow, type ParsedRow } from "../_pilot/import_row.ts";
 import { mapDbError } from "../_pilot/pgerror.ts";
 import { ALLOWED_SECTIONS, isSection } from "../_pilot/sections.ts";
 import { optInt, optString, readJsonObject } from "../_pilot/validation.ts";
 import { resolvePortalSession, tenantOrigins } from "../_tenant/tenant.ts";
 
 const PRODUCT_COLUMNS =
-  "id,external_id,title,section,category,gender,colors,price,in_stock,product_url,image_url,status,source,attributes,created_at,updated_at";
+  "id,external_id,title,section,category,gender,colors,price,in_stock,product_url,image_url,status,source,attributes,needs_reembed,created_at,updated_at";
 const STAGING_COLUMNS =
   "id,external_id,payload,status,error,source_file,run_id,product_id,created_at,updated_at,merged_at";
 const STAGE_BATCH_MAX = 50;
-const EMBED_CHUNK = 8; // encoder batch cap
 
 function escapeIlike(s: string): string {
   return s.replace(/([\\%_])/g, "\\$1");
@@ -449,18 +449,14 @@ Deno.serve((req) =>
         }
         const parsed = validate(candidate);
 
-        // searchable text changed -> re-embed NOW (title + category + colours)
-        const oldText = embedTextFor(
-          current.title,
-          current.category,
-          Array.isArray(current.colors) ? current.colors : [],
-        );
-        const textChanged = parsed.embedText !== oldText;
-        let embedding: string | undefined;
-        if (textChanged) {
-          const { embeddings } = await embedTexts(ctx.env, [parsed.embedText], session.tenantModel);
-          embedding = JSON.stringify(embeddings[0]);
-        }
+        // Vectors are IMAGE-derived (owner decision): a text edit must NOT
+        // touch the vector — it only changes what rows the SQL filters match.
+        // An image change DOES invalidate the stored vector, so the row is
+        // flagged and rides into the owner's export until new vectors arrive
+        // (admin_catalog ?op=embed_export), rather than matching silently on
+        // a picture it no longer looks like.
+        const imageChanged = parsed.image_url !== (current.image_url ?? null);
+        const needsReembed = imageChanged || current.needs_reembed === true;
 
         const { data: product, error } = await ctx.db
           .from("products")
@@ -477,14 +473,21 @@ Deno.serve((req) =>
             attributes: parsed.attributes,
             status: parsed.status,
             embedding_model: session.tenantModel, // products_guard enforces this
-            ...(embedding !== undefined ? { embedding } : {}),
+            needs_reembed: needsReembed,
           })
           .eq("id", productId)
           .eq("tenant_id", session.tenantId)
           .select(PRODUCT_COLUMNS)
           .single();
         if (error) throw mapDbError(error, ctx.requestId, "products.update");
-        return { body: { request_id: ctx.requestId, product, reembedded: textChanged } };
+        return {
+          body: {
+            request_id: ctx.requestId,
+            product,
+            needs_reembed: needsReembed,
+            image_changed: imageChanged,
+          },
+        };
       }
 
       throw new PilotError(

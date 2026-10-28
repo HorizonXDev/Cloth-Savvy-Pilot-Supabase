@@ -357,6 +357,68 @@ def insert_product(base: str, svc: str, tid: str, external_id: str, title: str,
             headers={"Prefer": "return=minimal"})
 
 
+# ------------------------------------------------- embedding job (owner's half)
+# 2026-10-26: catalog vectors come from IMAGES. The tenant queues rows, the
+# owner downloads the id -> url table, runs FashionCLIP over the pictures in
+# their own pipeline, and uploads the vectors back — applied BY ID through
+# op="embeddings_merge". Tests therefore seed through that same path: queue ->
+# vector -> merge, with vec() standing in for the pipeline (the local encoder
+# stub is deterministic per text, so a query of the same words cosine-matches
+# exactly the way a CLIP text query matches its own image embedding).
+
+def stage_rows(base: str, svc: str, tid: str, rows: list[dict]) -> list[str]:
+    """Queue rows into catalog_staging exactly as a tenant upload would."""
+    ids: list[str] = []
+    for r in rows:
+        payload = {
+            "external_id": r["external_id"], "title": r["title"], "section": r["section"],
+            "category": r.get("category"), "gender": r.get("gender"),
+            "colors": r.get("colors") or [], "price": r.get("price"),
+            "in_stock": r.get("in_stock", True), "product_url": r.get("product_url"),
+            "image_url": r.get("image_url"), "attributes": r.get("attributes") or {},
+            "status": r.get("status", "active"),
+        }
+        status, parsed, text, _ = j(
+            base, svc, "POST", "/rest/v1/catalog_staging",
+            body={"tenant_id": tid, "external_id": r["external_id"], "payload": payload,
+                  "status": "pending", "source_file": r.get("source_file", "test.csv")},
+            headers={"Prefer": "return=representation"})
+        if status not in (200, 201):
+            raise TestError(f"catalog_staging insert -> {status}: {text[:200]}")
+        ids.append(parsed[0]["id"])
+    return ids
+
+
+def embed_text_for_row(r: dict) -> str:
+    """Mirror of _pilot/import_row.ts embedTextFor (title + category + colours).
+    Production vectors are IMAGE-derived; this exists only so a test can hand
+    the merge op a vector its own query text will match."""
+    s = f"{r.get('title') or ''} {r.get('category') or ''} {' '.join(r.get('colors') or [])}"
+    return " ".join(s.split())[:300]
+
+
+def merge_vectors(fns: str, adm_token: str, tid: str, rows: list[dict],
+                  source: str = "pipeline.csv", vectors: list | None = None):
+    """Apply vectors BY ID (op=\"embeddings_merge\"); returns (status, parsed, text, hdrs)."""
+    if vectors is None:
+        vectors = [json.loads(vec(embed_text_for_row(r))) for r in rows]
+    body_rows = [{"external_id": r["external_id"], "embedding": vectors[i]}
+                 for i, r in enumerate(rows)]
+    return j(fns, adm_token, "POST", "/admin_catalog",
+             body={"op": "embeddings_merge", "tenant_id": tid, "rows": body_rows,
+                   "source": source})
+
+
+def seed_products_via_job(base, svc, fns, adm_token, tid, rows,
+                          source: str = "pipeline.csv"):
+    """The whole owner pipeline in one call: queue -> vectors -> merge."""
+    stage_rows(base, svc, tid, rows)
+    status, parsed, text, _ = merge_vectors(fns, adm_token, tid, rows, source)
+    if status != 200:
+        raise TestError(f"embeddings_merge -> {status}: {text[:300]}")
+    return parsed
+
+
 def drop_leftover_tenants(base: str, svc: str) -> None:
     """Remove leftovers of THIS suite's slugs (test_api_a/test_api_b) so a
     re-run starts clean. Never touches other tenants."""

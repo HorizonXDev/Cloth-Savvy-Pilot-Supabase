@@ -1,18 +1,20 @@
 // _pilot/import_row.ts — ONE validator for a catalog row, shared by the
-// admin import path, the TENANT portal staging path and the pipeline.
+// tenant portal's staging path and by everything that writes a row into the
+// queue.
 //
 // Why it is shared: the CSV that bit us in production (2026-10-26) failed
 // for a reason the wizard reported badly. Validation rules for external_id /
 // title / section / colours / price must be identical everywhere a row can
-// enter the catalogue, or the tenant's portal would accept what the admin
-// route rejects (or vice versa) and the failure surfaces much later, in the
-// pipeline, with a worse message.
+// enter the catalogue, or the tenant's portal would accept what the owner's
+// import rejects (or vice versa) and the failure surfaces much later.
 //
-// The embed text is part of this contract too: `title + category + colours`,
-// whitespace-collapsed and capped at 300 chars (the encoder's per-text cap).
-// tools/merge_staging.py rebuilds EXACTLY this string — change one, change
-// both, or the pipeline would write vectors into a different space than the
-// API's own re-embed path.
+// VECTORS ARE NOT THIS FILE'S BUSINESS (owner decision, 2026-10-26): a
+// row's embedding comes from its IMAGE, produced offline by the owner's
+// FashionCLIP run and applied by id through admin_catalog
+// ?op=embeddings_merge. Title / category / colours / section / price are
+// FILTERS ONLY. The SEARCH QUERY is still embedded (CLIP's text tower, same
+// joint 512-d space as the image vectors) — but nothing in the catalog is
+// ever embedded from its text.
 //
 // No imports by design: pure, testable, usable from any function.
 
@@ -31,14 +33,6 @@ export interface ParsedRow {
   image_url: string | null;
   attributes: Record<string, unknown>;
   status: "active" | "archived";
-  embedText: string;
-}
-
-/** The exact string the encoder embeds for a row (and for a product whose
- * text changed). Mirror in tools/merge_staging.py. */
-export function embedTextFor(title: string, category: string | null, colors: string[]): string {
-  return `${title} ${category ?? ""} ${colors.join(" ")}`.replace(/\s+/g, " ").trim()
-    .slice(0, 300); // encoder text cap
 }
 
 /** Validate one import row. Throws PilotError invalid_request with a precise
@@ -86,7 +80,6 @@ export function parseImportRow(
   return {
     external_id, title, section, category, gender, colors, price, in_stock,
     product_url, image_url, attributes, status: status as "active" | "archived",
-    embedText: embedTextFor(title, category, colors),
   };
 }
 

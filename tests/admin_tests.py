@@ -39,9 +39,12 @@ from api_tests import (  # noqa: E402 - shared harness/stub helpers
     j,
     kill_proc_tree,
     load_dotenv_if_present,
+    merge_vectors,
     record,
     require_config,
+    stage_rows,
     stub_config,
+    vec,
 )
 import api_tests as _api_tests  # noqa: E402  (RESULTS/RESULTS table reuse)
 
@@ -208,47 +211,97 @@ def a06_usage():
            f"calls={totals['calls']} endpoints={sorted(eps)} keys={len(parsed['by_key'])}")
 
 
-def a07_import():
-    st, parsed, _, _ = admin(fx.fns, fx.token, "POST", "/admin_catalog",
-                             body={"op": "import_start", "tenant_id": fx.tid_a, "rows_total": 3})
-    if st != 201:
-        record("A07 import: batch, per-row failures, counters", False, f"start={st}")
-        return
-    fx.run_id = parsed["run"]["id"]
+def a07_embedding_job():
+    """The owner's pipeline, end to end: queue -> id->url export -> vectors by
+    id -> products. Text is never embedded; bad vectors are skipped with a
+    reason; a changed image rides back into the export until new vectors land.
+    (ADM-1/ADM-2 are seeded here for A08/A09 below.)"""
     rows = [
         {"external_id": "ADM-1", "title": "Blue cotton kurta", "section": "top",
-         "category": "top", "colors": ["blue"], "price": 999.0},
+         "category": "top", "colors": ["blue"], "price": 999.0,
+         "image_url": "https://cdn.invalid/adm1.jpg"},
         {"external_id": "ADM-2", "title": "Linen office shirt", "section": "top",
-         "category": "shirt", "colors": ["blue", "white"], "price": 1499.0},
-        {"external_id": "ADM-3", "title": "Bad hat", "section": "hats"},  # invalid section
+         "category": "shirt", "colors": ["blue", "white"], "price": 1499.0,
+         "image_url": "https://cdn.invalid/adm2.jpg"},
     ]
-    st2, parsed2, _, _ = admin(fx.fns, fx.token, "POST", "/admin_catalog",
-                               body={"op": "import_batch", "tenant_id": fx.tid_a,
-                                     "run_id": fx.run_id, "rows": rows})
-    batch_ok = (st2 == 200 and parsed2["batch"]["ok"] == 2 and parsed2["batch"]["failed"] == 1
-                and "section" in parsed2["failed"][0]["reason"])
-    # duplicate re-import -> honest per-row failure, counters move
-    st3, parsed3, _, _ = admin(fx.fns, fx.token, "POST", "/admin_catalog",
-                               body={"op": "import_batch", "tenant_id": fx.tid_a,
-                                     "run_id": fx.run_id, "rows": [rows[0]]})
-    dup_ok = st3 == 200 and parsed3["batch"]["failed"] == 1 \
-        and "duplicate" in parsed3["failed"][0]["reason"]
-    st4, runs, _, _ = admin(fx.fns, fx.token, "GET", f"/admin_catalog?op=runs&tenant_id={fx.tid_a}")
-    run = next((r for r in runs.get("runs", []) if r["id"] == fx.run_id), {})
-    st5, parsed5, _, _ = admin(fx.fns, fx.token, "GET", f"/admin_catalog?op=products&tenant_id={fx.tid_a}")
-    total = parsed5.get("total") if st5 == 200 else -1
-    st6, _, _, _ = admin(fx.fns, fx.token, "POST", "/admin_catalog",
-                         body={"op": "import_finish", "tenant_id": fx.tid_a,
-                               "run_id": fx.run_id, "status": "done"})
-    st7, parsed7, _, _ = admin(fx.fns, fx.token, "POST", "/admin_catalog",
-                               body={"op": "import_batch", "tenant_id": fx.tid_a,
-                                     "run_id": fx.run_id, "rows": [rows[1]]})
-    ok = (batch_ok and dup_ok and st4 == 200
-          and run.get("rows_ok") == 2 and run.get("rows_failed") == 2
-          and total == 2 and st6 == 200 and st7 == 400)
-    record("A07 import: batch, per-row failures, counters", ok,
-           f"batch={parsed2['batch']} dup_failed={parsed3['batch']['failed']} "
-           f"run_ok={run.get('rows_ok')} run_failed={run.get('rows_failed')} total={total} finished={st7}")
+    try:
+        stage_rows(fx.base, fx.svc, fx.tid_a, rows)
+    except TestError as e:
+        record("A07 embedding job: export, merge by id, skips, re-embed flag",
+               False, f"queue failed: {e}")
+        return
+
+    # 1. the export lists both queued rows with their image urls
+    st, exp, _, _ = admin(fx.fns, fx.token, "GET",
+                          f"/admin_catalog?op=embed_export&tenant_id={fx.tid_a}")
+    export_ids = {r["external_id"] for r in exp.get("rows", [])} if st == 200 else set()
+    export_ok = st == 200 and {"ADM-1", "ADM-2"} <= export_ids \
+        and all(r.get("image_url") for r in exp.get("rows", []) if r["external_id"].startswith("ADM"))
+
+    # 2. apply the vectors by id, with the filename recorded in the tenant's history
+    st2, merged, _, _ = merge_vectors(fx.fns, fx.token, fx.tid_a, rows, source="a07.csv")
+    counts = (merged or {}).get("counts", {})
+    merge_ok = st2 == 200 and counts.get("merged") == 2 and counts.get("skipped") == 0
+
+    # 3. products exist, the queue drained, the export is empty again
+    st3, prods, _, _ = admin(fx.fns, fx.token, "GET",
+                             f"/admin_catalog?op=products&tenant_id={fx.tid_a}")
+    total = prods.get("total", -1) if st3 == 200 else -1
+    st4, exp2, _, _ = admin(fx.fns, fx.token, "GET",
+                            f"/admin_catalog?op=embed_export&tenant_id={fx.tid_a}")
+    export_clear = st4 == 200 and exp2.get("total") == 0
+
+    # 4. bad vectors and unknown ids are skipped with reasons, nothing moves
+    bad = [
+        {"external_id": "ADM-1", "embedding": [0.0] * 511},
+        {"external_id": "NO-SUCH-ID", "embedding": json.loads(vec("orphan vector"))},
+        {"external_id": "ADM-2", "embedding": "not-a-vector"},
+    ]
+    st5, sk, _, _ = j(fx.fns, fx.token, "POST", "/admin_catalog",
+                      body={"op": "embeddings_merge", "tenant_id": fx.tid_a, "rows": bad})
+    skipped = (sk or {}).get("skipped", [])
+    skip_ok = (st5 == 200 and len(skipped) == 3
+               and "512" in skipped[0]["reason"]
+               and "no queued row" in skipped[1]["reason"]
+               and "512" in skipped[2]["reason"])
+    st6, prods2, _, _ = admin(fx.fns, fx.token, "GET",
+                              f"/admin_catalog?op=products&tenant_id={fx.tid_a}")
+    unchanged = st6 == 200 and prods2.get("total") == total == 2
+
+    # 5. a changed image flags the product -> back into the export -> cleared by new vectors
+    p1_id = next((p["id"] for p in (prods2.get("products") or [])
+                  if p["external_id"] == "ADM-1"), None)
+    stf, _, tf, _ = j(fx.base, fx.svc, "PATCH", f"/rest/v1/products?id=eq.{p1_id}",
+                      body={"needs_reembed": True})
+    st7, exp3, _, _ = admin(fx.fns, fx.token, "GET",
+                            f"/admin_catalog?op=embed_export&tenant_id={fx.tid_a}")
+    flagged = stf < 300 and st7 == 200 and any(
+        r["external_id"] == "ADM-1" for r in exp3.get("rows", []))
+    st8, merged2, _, _ = merge_vectors(fx.fns, fx.token, fx.tid_a, [rows[0]],
+                                       source="reflag.csv")
+    st9, prods3, _, _ = admin(fx.fns, fx.token, "GET",
+                              f"/admin_catalog?op=products&tenant_id={fx.tid_a}")
+    p1 = next((p for p in (prods3.get("products") or [])
+               if p["external_id"] == "ADM-1"), {})
+    cleared = (st8 == 200 and (merged2 or {}).get("counts", {}).get("merged") == 1
+               and p1.get("needs_reembed") is False)
+    st10, exp4, _, _ = admin(fx.fns, fx.token, "GET",
+                             f"/admin_catalog?op=embed_export&tenant_id={fx.tid_a}")
+    cleared_export = st10 == 200 and not any(
+        r["external_id"] == "ADM-1" for r in exp4.get("rows", []))
+
+    # 6. the merge shows up in the tenant's own upload history
+    st11, runs, _, _ = admin(fx.fns, fx.token, "GET",
+                             f"/admin_catalog?op=runs&tenant_id={fx.tid_a}")
+    run_ok = st11 == 200 and any("a07.csv" in (r.get("notes") or "")
+                                 for r in runs.get("runs", []))
+
+    ok = (export_ok and merge_ok and total == 2 and export_clear and skip_ok
+          and unchanged and flagged and cleared and cleared_export and run_ok)
+    record("A07 embedding job: export, merge by id, skips, re-embed flag", ok,
+           f"export={sorted(export_ids)} merged={counts} total={total} "
+           f"skips={[s['reason'][:24] for s in skipped]} flag={'ok' if flagged else 'FAIL'} "
+           f"cleared={'ok' if cleared else 'FAIL'} history={'ok' if run_ok else 'FAIL'}")
 
 
 def a08_search_preview():
@@ -429,7 +482,7 @@ def main() -> int:
                 ("A04", a04_keys),
                 ("A05", a05_suspend),
                 ("A06", a06_usage),
-                ("A07", a07_import),
+                ("A07", a07_embedding_job),
                 ("A08", a08_search_preview),
                 ("A09", a09_archive),
                 ("A10", a10_isolation),
