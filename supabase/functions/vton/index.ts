@@ -19,16 +19,20 @@
 // Auth: sk_ key — tenant from the key only (like every pilot route), and the
 // call is metered by the pipeline's finally block (endpoint label "vton").
 //
-// TIMEOUTS: op=look may hold the connection for minutes (klein ~10-30 s +
-// a COLD L4 GPU container + inference). Callers must use ≥180 s timeouts;
-// the engine-side ceiling is VTON_TIMEOUT_MS (240 s).
+// TIMEOUTS: Supabase kills the worker at 150 s wall-clock on the Free plan
+// (400 s on paid), so the WHOLE chain must answer inside that — the engine
+// budget is VTON_TIMEOUT_MS (135 s) and op=look shrinks it by whatever the
+// klein render already consumed. Callers should use ~140 s client timeouts.
+// A slow L4 capacity wait therefore surfaces as a clean 502 + Retry-After
+// instead of the platform's opaque `546 WORKER_RESOURCE_LIMIT` (observed
+// live 2026-10-29 before this budget existed).
 //
 // Known business risk (owner's own B2B_DISCOVERY_REPORT): FASHN's
 // human-parser weights are NVIDIA research/eval-only — fine to build and
 // test, read report risk #1 before charging tenants for this route.
 
 import { renderCombo, KLEIN_MAX_ITEMS, type RenderItem } from "../_pilot/klein.ts";
-import { tryOn, VTON_CATEGORIES, type VtonCategory } from "../_pilot/vton.ts";
+import { tryOn, VTON_CATEGORIES, VTON_TIMEOUT_MS, type VtonCategory } from "../_pilot/vton.ts";
 import { PilotError } from "../_pilot/errors.ts";
 import { handle } from "../_pilot/http.ts";
 import { readEnv } from "../_pilot/env.ts";
@@ -194,15 +198,22 @@ Deno.serve((req) =>
       });
       c.timings.render = Math.round(performance.now() - t0);
 
-      // 2. mannequin (in-memory base64) + person photo → final try-on
+      // 2. mannequin (in-memory base64) + person photo → final try-on. The
+      // try-on gets whatever remains of the 135 s budget after the render,
+      // so the route always finishes inside the platform's 150 s wall clock.
       const t1 = performance.now();
-      const finalImage = await tryOn(c.env, {
-        person_image_url: parsed.person_image_url,
-        garment_image_base64: rendered.base64,
-        category: parsed.category,
-        num_timesteps: parsed.num_timesteps,
-        tenantId,
-      });
+      const budget = Math.max(15_000, VTON_TIMEOUT_MS - Math.round(t1 - t0));
+      const finalImage = await tryOn(
+        c.env,
+        {
+          person_image_url: parsed.person_image_url,
+          garment_image_base64: rendered.base64,
+          category: parsed.category,
+          num_timesteps: parsed.num_timesteps,
+          tenantId,
+        },
+        budget,
+      );
       c.timings.tryon = Math.round(performance.now() - t1);
 
       return {
