@@ -24,7 +24,7 @@ import { corsHeadersFor } from "./cors.ts";
 import { errorEnvelope, internalMessage, PilotError, statusForCode } from "./errors.ts";
 import { authenticate } from "./auth.ts";
 import { logError, logWarn } from "./logger.ts";
-import { enforceRateLimit } from "./rate_limit.ts";
+import { enforceEndpointLimits, enforceRateLimit } from "./rate_limit.ts";
 import { recordUsage } from "./metering.ts";
 import { serviceClient } from "./supabase.ts";
 import type { HandlerContext, HandlerResult, PilotEnv } from "./types.ts";
@@ -89,6 +89,9 @@ export async function handle(
       ctx.auth = await authenticate(req, db, env, requestId);
       authCtx = ctx.auth;
       await enforceRateLimit(db, ctx.auth, requestId); // may throw 429 (metered below)
+      // P0-3: the GPU route also carries a tight per-key window + a tenant-wide
+      // monthly cap, and those FAIL CLOSED (429/402/503, all metered below).
+      await enforceEndpointLimits(db, ctx.auth, requestId, opts.endpoint);
     }
 
     const started = performance.now();

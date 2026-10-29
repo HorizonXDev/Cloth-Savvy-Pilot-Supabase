@@ -1109,6 +1109,134 @@ def a31_vton_metered(fx: Fx) -> None:
            f"401_rows={len(rows2)}")
 
 
+# ------------------------------------------------- P0-3: vton spend controls
+def _patch_tenant_settings(fx: Fx, tenant_id: str, settings: dict) -> None:
+    st, _, text, _ = j(fx.base, fx.svc, "PATCH",
+                       f"/rest/v1/tenants?id=eq.{tenant_id}",
+                       body={"settings": settings})
+    if st >= 300:
+        raise TestError(f"PATCH tenants.settings -> {st}: {text[:200]}")
+
+
+def _vton_usage_rows(fx: Fx, tenant_id: str) -> list[dict]:
+    return rest_ok(fx.base, fx.svc, "GET",
+                   "/rest/v1/usage_events?select=id,status_code,created_at"
+                   f"&tenant_id=eq.{tenant_id}&endpoint=eq.vton&limit=1000")
+
+
+def a32_vton_per_minute_limit(fx: Fx) -> None:
+    """P0-3: /vton carries its OWN per-key window (default 3/min), tighter
+    than the global rate_limit_per_min and scoped to this endpoint only."""
+    settings = {
+        "min_similarity": 0.25, "default_limit": 10, "rate_limit_per_min": 60,
+        "vton_rate_limit_per_min": 1, "vton_monthly_cap": 1000,
+        "combos": {"office": ["top", "bottom", "accessory"]},
+    }
+    body = {"op": "render", "items": [{"image_url": STUB_IMAGE}]}
+    # A brand-new key: its vton window starts empty no matter what A27-A31 did.
+    key_q, _ = make_key(fx.base, fx.svc, fx.tid_a, "sk_live_", "a-vton-quota")
+    hdr_q = {"Authorization": f"Bearer {key_q}"}
+    try:
+        _patch_tenant_settings(fx, fx.tid_a, settings)
+        st_ok, _, _, _ = api(fx.fns, None, "POST", "/vton", body=body, headers=hdr_q)
+        st_429, p_429, _, h_429 = api(fx.fns, None, "POST", "/vton", body=body,
+                                     headers=hdr_q)
+        # Scoped to /vton: the same key still calls other endpoints.
+        st_occ, _, _, _ = api(fx.fns, None, "GET", "/occasions", headers=hdr_q)
+        # Scoped per key: another key of the same tenant is unaffected.
+        st_k2, _, _, _ = api(fx.fns, None, "POST", "/vton", body=body,
+                             headers={"Authorization": f"Bearer {fx.key_a_sandbox}"})
+    finally:
+        settings["vton_rate_limit_per_min"] = 30
+        _patch_tenant_settings(fx, fx.tid_a, settings)
+    problems = []
+    if st_ok != 200:
+        problems.append(f"1st={st_ok}")
+    if st_429 != 429 or err_code(p_429) != "rate_limited":
+        problems.append(f"2nd={st_429}/{err_code(p_429)}")
+    if h_429.get("Retry-After") != "60":
+        problems.append(f"Retry-After={h_429.get('Retry-After')}")
+    if st_occ != 200:
+        problems.append(f"/occasions={st_occ}")
+    if st_k2 != 200:
+        problems.append(f"2nd key={st_k2}")
+    record("A32 vton 429 per-minute (own window, per key)", not problems,
+           "; ".join(problems) if problems else
+           "200 then 429+Retry-After=60; other endpoint 200; 2nd key 200")
+
+
+def a33_vton_monthly_cap(fx: Fx) -> None:
+    """P0-3: the tenant-wide monthly ceiling answers 402 quota_exceeded and
+    blocks only /vton — search, combos, etc. keep working."""
+    settings = {
+        "min_similarity": 0.25, "rate_limit_per_min": 60,
+        "vton_rate_limit_per_min": 30, "vton_monthly_cap": 1,
+        "combos": {"casual": ["top", "footwear"]},
+    }
+    body = {"op": "render", "items": [{"image_url": STUB_IMAGE}]}
+    hdr = {"Authorization": f"Bearer {fx.key_b_main}"}
+    try:
+        _patch_tenant_settings(fx, fx.tid_b, settings)
+        st1, _, _, _ = api(fx.fns, None, "POST", "/vton", body=body, headers=hdr)
+        st2, p2, _, _ = api(fx.fns, None, "POST", "/vton", body=body, headers=hdr)
+        st_occ, _, _, _ = api(fx.fns, None, "GET", "/occasions", headers=hdr)
+    finally:
+        settings["vton_monthly_cap"] = 100
+        _patch_tenant_settings(fx, fx.tid_b, settings)
+    msg = ""
+    if isinstance(p2, dict):
+        msg = ((p2.get("error") or {}).get("message") or "")
+    problems = []
+    if st1 != 200:
+        problems.append(f"1st={st1}")
+    if st2 != 402 or err_code(p2) != "quota_exceeded":
+        problems.append(f"2nd={st2}/{err_code(p2)}")
+    if "monthly try-on cap" not in msg:
+        problems.append(f"message={msg[:60]!r}")
+    if st_occ != 200:
+        problems.append(f"/occasions={st_occ}")
+    record("A33 vton 402 monthly cap (tenant-wide)", not problems,
+           "; ".join(problems) if problems else "200 then 402 quota_exceeded; /occasions 200")
+
+
+def a34_vton_blocked_calls_free(fx: Fx) -> None:
+    """P0-3: a call refused by a quota check is metered (so it is visible)
+    but must NOT consume the monthly cap — otherwise a client hammering the
+    limit burns its own month. Proves both halves against usage_events."""
+    before = _vton_usage_rows(fx, fx.tid_b)
+    before_billable = [r for r in before if r.get("status_code") not in (429, 402)]
+    settings = {
+        "min_similarity": 0.25, "rate_limit_per_min": 60,
+        "vton_rate_limit_per_min": 1, "vton_monthly_cap": 1000,
+        "combos": {"casual": ["top", "footwear"]},
+    }
+    body = {"op": "render", "items": [{"image_url": STUB_IMAGE}]}
+    key_q, _ = make_key(fx.base, fx.svc, fx.tid_b, "sk_live_", "b-vton-quota")
+    hdr = {"Authorization": f"Bearer {key_q}"}
+    try:
+        _patch_tenant_settings(fx, fx.tid_b, settings)
+        codes = []
+        for _ in range(3):
+            st, _, _, _ = api(fx.fns, None, "POST", "/vton", body=body, headers=hdr)
+            codes.append(st)
+    finally:
+        settings["vton_rate_limit_per_min"] = 30
+        settings["vton_monthly_cap"] = 100
+        _patch_tenant_settings(fx, fx.tid_b, settings)
+    after = _vton_usage_rows(fx, fx.tid_b)
+    after_billable = [r for r in after if r.get("status_code") not in (429, 402)]
+    problems = []
+    if codes != [200, 429, 429]:
+        problems.append(f"codes={codes}")
+    if len(after_billable) != len(before_billable) + 1:
+        problems.append(f"billable {len(before_billable)}->{len(after_billable)}")
+    if len(after) != len(before) + 3:
+        problems.append(f"metered rows {len(before)}->{len(after)} (want +3)")
+    record("A34 vton 429/402 metered but quota-free", not problems,
+           "; ".join(problems) if problems else
+           "200,429,429; +3 metered rows, +1 billable")
+
+
 # ------------------------------------------------------------------ main
 def main() -> int:
     load_dotenv_if_present()
@@ -1181,14 +1309,19 @@ def main() -> int:
     try:
         # ---- fixtures ------------------------------------------------------
         drop_leftover_tenants(base, svc)
+        # P0-3: the default vton window is 3/min, but A27-A31 legitimately make
+        # ~10 /vton calls in a row. Give the fixtures headroom so those tests
+        # keep testing their own concern; A32-A34 set tight values themselves.
         fx.tid_a = rpc_ok_tenant(base, svc, "test_api_a", {
             "currency": "INR", "min_similarity": 0.25, "default_limit": 10,
             "rate_limit_per_min": 60,
+            "vton_rate_limit_per_min": 30, "vton_monthly_cap": 1000,
             "combos": {"office": ["top", "bottom", "accessory"],
                        "wedding": ["saree", "blouse", "jewellery"]},
         })
         fx.tid_b = rpc_ok_tenant(base, svc, "test_api_b", {
             "min_similarity": 0.25, "rate_limit_per_min": 60,
+            "vton_rate_limit_per_min": 30, "vton_monthly_cap": 100,
             "combos": {"casual": ["top", "footwear"]},
         })
 
@@ -1260,6 +1393,9 @@ def main() -> int:
             ("A29", lambda: a29_vton_look_chains(fx)),
             ("A30", lambda: a30_vton_validation(fx)),
             ("A31", lambda: a31_vton_metered(fx)),
+            ("A32", lambda: a32_vton_per_minute_limit(fx)),
+            ("A33", lambda: a33_vton_monthly_cap(fx)),
+            ("A34", lambda: a34_vton_blocked_calls_free(fx)),
         ]:
             try:
                 fn()

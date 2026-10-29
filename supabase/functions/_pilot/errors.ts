@@ -14,6 +14,8 @@ export type ErrorCode =
   | "unauthorized"
   | "forbidden"
   | "rate_limited"
+  | "quota_exceeded" // tenant's monthly cap for an expensive route (402)
+  | "quota_unavailable" // the cap could not be verified, request refused (503)
   | "unsupported_occasion"
   | "upstream_llm"
   | "upstream_encoder"
@@ -26,6 +28,8 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   forbidden: 403,
   unsupported_occasion: 422,
   rate_limited: 429,
+  quota_exceeded: 402, // "payment/quota required" — distinct from "slow down"
+  quota_unavailable: 503,
   internal: 500,
   upstream_llm: 502,
   upstream_encoder: 503,

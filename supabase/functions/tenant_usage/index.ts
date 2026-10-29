@@ -4,7 +4,13 @@
 //   -> { totals:{calls,units}, month_to_date:{calls,units},
 //        by_endpoint:[{endpoint,calls,units,codes:{}}],
 //        by_key:[{key_id,prefix,environment,calls}],
-//        by_day:[{day,calls}], rate_limit_per_min, currency, truncated }
+//        by_day:[{day,calls}], rate_limit_per_min, currency, truncated,
+//        vton:{rate_limit_per_min,monthly_cap,calls_this_month} }
+//
+// `vton` mirrors the P0-3 quota enforced by _pilot/rate_limit.ts, so the
+// portal can show "12 / 100 try-ons this month" without guessing. The count
+// excludes calls that were themselves refused by a quota check (429/402) —
+// exactly what the limiter counts — so the number matches what is enforced.
 //
 // Same aggregation engine as admin_usage (fetch ≤10000 rows for the
 // window, aggregate in-function — honest at pilot scale, zero new SQL
@@ -69,6 +75,18 @@ Deno.serve((req) =>
       monthStart.setUTCDate(1);
       monthStart.setUTCHours(0, 0, 0, 0);
 
+      // P0-3 quota mirror: billable try-on calls this UTC month, tenant-wide.
+      // A head count is cheap and exact; 429/402 rows are excluded because the
+      // limiter excludes them too (a blocked call must not consume the cap).
+      const { count: vtonCount, error: vtonErr } = await ctx.db
+        .from("usage_events")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", session.tenantId)
+        .eq("endpoint", "vton")
+        .gt("created_at", monthStart.toISOString())
+        .not("status_code", "in", "(429,402)");
+      if (vtonErr) throw mapDbError(vtonErr, ctx.requestId, "usage_events.vton_count");
+
       const endpointMap = new Map<string, { calls: number; units: number; codes: Map<number, number> }>();
       const keyMap = new Map<string, number>();
       const dayMap = new Map<string, number>();
@@ -120,6 +138,11 @@ Deno.serve((req) =>
           // Display values the portal renders as-is (no pricing applied).
           currency: session.settings.currency,
           rate_limit_per_min: session.settings.rate_limit_per_min,
+          vton: {
+            rate_limit_per_min: session.settings.vton_rate_limit_per_min,
+            monthly_cap: session.settings.vton_monthly_cap,
+            calls_this_month: vtonCount ?? 0,
+          },
           by_endpoint: [...endpointMap.entries()]
             .map(([endpoint, v]) => ({
               endpoint,

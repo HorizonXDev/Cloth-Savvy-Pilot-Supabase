@@ -10,6 +10,8 @@
 //     "min_similarity": 0.25,                  // 0..1
 //     "default_limit": 10,                     // int 1..50
 //     "rate_limit_per_min": 60,                // int 1..10000
+//     "vton_rate_limit_per_min": 3,            // int 1..1000 (GPU route)
+//     "vton_monthly_cap": 100,                 // int 0..100000 (0 = off)
 //     "combos": {                              // occasion -> ordered sections
 //       "wedding": ["saree", "blouse", "jewellery"],
 //       "office":  ["top", "bottom", "accessory"]
@@ -21,6 +23,8 @@
 //   min_similarity    0.25
 //   default_limit     10
 //   rate_limit_per_min 60           (decision D4)
+//   vton_rate_limit_per_min 3       (P0-3: try-on is the only GPU route)
+//   vton_monthly_cap 100            (P0-3: per UTC month, 0 = no cap)
 //   combos            DEMO_DEFAULT_COMBOS below — a small GENERIC occasion
 //                     list that works for any brand (no saree/kurta
 //                     assumption). Real tenants must set their own recipes
@@ -32,6 +36,11 @@ import type { TenantSettings } from "./types.ts";
 export const DEFAULT_MIN_SIMILARITY = 0.25;
 export const DEFAULT_LIMIT = 10;
 export const DEFAULT_RATE_LIMIT_PER_MIN = 60;
+// P0-3 — `/vton` runs GPU work, so it gets its own much tighter window and a
+// monthly ceiling. Both are per tenant settings; these are the documented
+// defaults used when a tenant has not set them.
+export const DEFAULT_VTON_RATE_LIMIT_PER_MIN = 3;
+export const DEFAULT_VTON_MONTHLY_CAP = 100;
 export const MAX_OCCASIONS = 50;
 export const MAX_SECTIONS_PER_RECIPE = 8; // = one encoder batch of section labels
 
@@ -58,6 +67,8 @@ export function parseTenantSettings(raw: unknown): ParsedSettings {
     min_similarity: DEFAULT_MIN_SIMILARITY,
     default_limit: DEFAULT_LIMIT,
     rate_limit_per_min: DEFAULT_RATE_LIMIT_PER_MIN,
+    vton_rate_limit_per_min: DEFAULT_VTON_RATE_LIMIT_PER_MIN,
+    vton_monthly_cap: DEFAULT_VTON_MONTHLY_CAP,
     combos: structuredClone(DEMO_DEFAULT_COMBOS),
   };
 
@@ -95,6 +106,21 @@ export function parseTenantSettings(raw: unknown): ParsedSettings {
     out.rate_limit_per_min = obj.rate_limit_per_min;
   } else if (obj.rate_limit_per_min !== undefined) {
     issues.push("rate_limit_per_min invalid (want int 1..10000) — using default");
+  }
+
+  if (typeof obj.vton_rate_limit_per_min === "number" &&
+      Number.isInteger(obj.vton_rate_limit_per_min) &&
+      obj.vton_rate_limit_per_min >= 1 && obj.vton_rate_limit_per_min <= 1000) {
+    out.vton_rate_limit_per_min = obj.vton_rate_limit_per_min;
+  } else if (obj.vton_rate_limit_per_min !== undefined) {
+    issues.push("vton_rate_limit_per_min invalid (want int 1..1000) — using default");
+  }
+
+  if (typeof obj.vton_monthly_cap === "number" && Number.isInteger(obj.vton_monthly_cap) &&
+      obj.vton_monthly_cap >= 0 && obj.vton_monthly_cap <= 100000) {
+    out.vton_monthly_cap = obj.vton_monthly_cap; // 0 = cap disabled
+  } else if (obj.vton_monthly_cap !== undefined) {
+    issues.push("vton_monthly_cap invalid (want int 0..100000) — using default");
   }
 
   if (obj.combos !== undefined) {

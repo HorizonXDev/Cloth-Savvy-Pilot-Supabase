@@ -71,6 +71,13 @@ export interface TenantSettings {
   min_similarity: number;
   default_limit: number;
   rate_limit_per_min: number;
+  /** Per-key, per-minute cap for the expensive `vton` route (GPU spend on
+   *  every call). Stricter than `rate_limit_per_min`; enforced in
+   *  _pilot/rate_limit.ts. Default 3 (see settings.ts). */
+  vton_rate_limit_per_min: number;
+  /** Per-tenant ceiling on billable `vton` calls per UTC calendar month.
+   *  0 disables the cap. Exceeding it answers 402 quota_exceeded. */
+  vton_monthly_cap: number;
   combos: Record<string, string[]>; // occasion -> ordered pilot sections
 }
 

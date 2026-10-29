@@ -25,6 +25,8 @@ import {
   DEMO_DEFAULT_COMBOS,
   DEFAULT_MIN_SIMILARITY,
   DEFAULT_RATE_LIMIT_PER_MIN,
+  DEFAULT_VTON_MONTHLY_CAP,
+  DEFAULT_VTON_RATE_LIMIT_PER_MIN,
   normalizeOccasion,
   parseTenantSettings,
 } from "./settings.ts";
@@ -210,6 +212,24 @@ check("settings: documented defaults when absent/garbage", () => {
   assertEq(bad.settings.currency, null);
   assert(bad.issues.length >= 4, `issues=${bad.issues.length}`);
 });
+check("settings: vton quota defaults, ranges, 0 = cap disabled", () => {
+  const base = parseTenantSettings(null).settings;
+  assertEq(base.vton_rate_limit_per_min, DEFAULT_VTON_RATE_LIMIT_PER_MIN);
+  assertEq(base.vton_monthly_cap, DEFAULT_VTON_MONTHLY_CAP);
+
+  const tuned = parseTenantSettings({ vton_rate_limit_per_min: 1, vton_monthly_cap: 0 }).settings;
+  assertEq(tuned.vton_rate_limit_per_min, 1);
+  assertEq(tuned.vton_monthly_cap, 0, "0 must disable the cap, not fall back");
+
+  const bad = parseTenantSettings({ vton_rate_limit_per_min: 0, vton_monthly_cap: -5 });
+  assertEq(bad.settings.vton_rate_limit_per_min, DEFAULT_VTON_RATE_LIMIT_PER_MIN);
+  assertEq(bad.settings.vton_monthly_cap, DEFAULT_VTON_MONTHLY_CAP);
+  assert(bad.issues.length >= 2, `issues=${bad.issues.join("; ")}`);
+
+  const floats = parseTenantSettings({ vton_rate_limit_per_min: 1.5, vton_monthly_cap: 2.5 });
+  assertEq(floats.settings.vton_rate_limit_per_min, DEFAULT_VTON_RATE_LIMIT_PER_MIN);
+  assertEq(floats.settings.vton_monthly_cap, DEFAULT_VTON_MONTHLY_CAP);
+});
 check("settings: bad recipe drops only that occasion; all-bad -> defaults", () => {
   const mixed = parseTenantSettings({
     combos: {
@@ -306,12 +326,14 @@ check("combos: anchor owns its section in EVERY combo (dedupe exception)", () =>
 });
 
 // ----------------------------------------------------------------- error mapping
-check("errors: code -> status for all 8 stable codes", () => {
+check("errors: code -> status for every stable code", () => {
   const want: Record<ErrorCode, number> = {
     invalid_request: 400,
     unauthorized: 401,
     forbidden: 403,
     rate_limited: 429,
+    quota_exceeded: 402,
+    quota_unavailable: 503,
     unsupported_occasion: 422,
     upstream_llm: 502,
     upstream_encoder: 503,

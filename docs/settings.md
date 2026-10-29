@@ -25,6 +25,8 @@ Invoke-RestMethod -Method Post -Uri "$url/rest/v1/rpc/create_tenant" `
 | `min_similarity` | number 0..1 | `0.25` | default similarity floor applied by search/combos (per-request override allowed) |
 | `default_limit` | integer 1..50 | `10` | default number of rows for search / combos |
 | `rate_limit_per_min` | integer 1..10000 | `60` | per-key requests per minute (decision D4), enforced by counting recent `usage_events` rows |
+| `vton_rate_limit_per_min` | integer 1..1000 | `3` | per-key, per-minute cap for `POST /v1/vton` only — the GPU route. Stricter than `rate_limit_per_min` because every call bills GPU seconds |
+| `vton_monthly_cap` | integer 0..100000 | `100` | per-tenant ceiling on billable `/v1/vton` calls per **UTC calendar month**, across all keys. `0` disables the cap |
 | `combos` | object: occasion → array of 1..8 pilot sections | see "Demo defaults" | THE recipe map: which sections a combo for an occasion must fill |
 
 ## Occasion keys and sections
@@ -122,6 +124,27 @@ sees after normalization — check it after any settings change.
   `(tenant_id, created_at)`). Cost: one indexed count per request — fine at
   pilot scale (thousands of requests/min per key would need a real counter;
   see the comment in `_pilot/rate_limit.ts`).
+* `vton_rate_limit_per_min` / `vton_monthly_cap` — the spend controls for the
+  GPU route, checked **before** any render or try-on work starts:
+  * the per-minute check is per API key, same rolling 60 s window as
+    `rate_limit_per_min`; over it the API answers `429 rate_limited` with
+    `Retry-After: 60`.
+  * the monthly check spans **every key of the tenant**, so issuing a second
+    key does not buy a second month; at the cap the API answers
+    `402 quota_exceeded` and names the reset date.
+  * calls refused by these checks (429/402) are metered like every other
+    call but are **not counted** against the quota, so hammering the limit
+    cannot exhaust the month by itself.
+  * `/vton` **fails closed**: if the usage count cannot be read, the call is
+    refused with `503 quota_unavailable` + `Retry-After: 30` rather than
+    letting an unaccounted GPU job through. Every other route keeps the
+    original fail-open behaviour for its rate limit.
+  * counting rows is racy by design: concurrent calls can all read "under
+    cap", so a burst can overshoot by roughly the per-minute allowance. That
+    is acceptable for a spend ceiling (and much cheaper than an atomic
+    reservation); tighten `vton_rate_limit_per_min` if you need a harder one.
+  * `op=look` runs TWO GPU stages (render + try-on) but counts as ONE call,
+    because the meter counts requests. Price accordingly.
 * `combos` — the ONLY source of occasions: `GET /occasions` lists its keys,
   `POST /combos` looks the requested occasion up in it, and an unknown
   occasion is answered `422 unsupported_occasion` listing the valid ones.
