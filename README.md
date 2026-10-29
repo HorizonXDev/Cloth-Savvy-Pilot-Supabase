@@ -405,7 +405,7 @@ Cloth-Savvy-Pilot-supabase/
 │   ├── api_tests.py             26 end-to-end API tests against the LOCAL stack + stubs
 │   ├── admin_tests.py           12 end-to-end tests for the admin_* dashboard functions
 │   ├── tenant_portal_tests.py   14 end-to-end tests incl. the admin/portal separation matrix
-│   ├── serve_local.ts           host-Deno harness serving all 13 functions (auto-spawned)
+│   ├── serve_local.ts           host-Deno harness serving all 14 functions (auto-spawned)
 │   ├── stub_encoder.py          deterministic local encoder stub (embed_text shared with tests)
 │   ├── stub_llm.py              local OpenAI-compatible LLM stub (combo plans)
 │   └── live_smoke.py            4-call smoke test against a RUNNING API (you run this)
