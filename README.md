@@ -33,7 +33,7 @@ Cloth-Savvy-Pilot-supabase/
 ```
 
 Phases 1–3 added the Edge Function API layer (`supabase/functions/`,
-`tests/`, `docs/`, `../tools/issue_key.py`) — see **§11 Part B** below.
+`tests/`, `docs/`, `../pilot-ops/tools/issue_key.py`) — see **§11 Part B** below.
 
 ### What each migration does (plain language)
 
@@ -409,7 +409,7 @@ Cloth-Savvy-Pilot-supabase/
 │   ├── stub_encoder.py          deterministic local encoder stub (embed_text shared with tests)
 │   ├── stub_llm.py              local OpenAI-compatible LLM stub (combo plans)
 │   └── live_smoke.py            4-call smoke test against a RUNNING API (you run this)
-└── (../tools/issue_key.py       owner tool: generate + register ONE sk_ key — see §11.5)
+└── (../pilot-ops/tools/issue_key.py  owner tool: generate + register ONE sk_ key — see §11.5)
 ```
 
 ## 11.2 Running the API tests — LOCAL stack
@@ -510,7 +510,7 @@ per-function `verify_jwt` from `config.toml` on the current CLI; if a
 deployed function answers platform 401s before our own errors, re-run the
 deploy with `--no-verify-jwt`.
 
-## 11.5 Issuing an API key — tools/issue_key.py
+## 11.5 Issuing an API key — pilot-ops/tools/issue_key.py
 
 The tool prints the plaintext key EXACTLY ONCE (copy it into your password
 manager — it is gone afterwards), stores only its SHA-256, and writes
@@ -533,7 +533,7 @@ export PILOT_SUPABASE_URL=https://<your-project-ref>.supabase.co
 export PILOT_SUPABASE_SERVICE_KEY=<service key>
 export PILOT_TENANT_ID=<tenant uuid>
 export PILOT_KEY_ENVIRONMENT=live
-python ../tools/issue_key.py
+python ../pilot-ops/tools/issue_key.py
 ```
 
 Keys are `sk_live_`/`sk_test_` + 43 URL-safe chars (decision D3). `pk_`
