@@ -53,6 +53,7 @@ CANONICAL_MODEL = "fashion-clip@7e3ba62"
 ENC_REVISION = "7e3ba62ce16b379a1ab479346b66f192e76f51b7"
 STUB_ENCODER_PORT = int(os.environ.get("STUB_ENCODER_PORT", "8841"))
 STUB_LLM_PORT = int(os.environ.get("STUB_LLM_PORT", "8842"))
+STUB_VTON_PORT = int(os.environ.get("STUB_VTON_PORT", "8843"))   # stub_vton.py
 STUB_ENCODER_TOKEN = "local-stub-encoder-token"   # local-only, not a secret
 ALLOWED_ORIGIN = "http://localhost:3000"
 # Local functions are served by tests/serve_local.ts (host Deno harness):
@@ -215,12 +216,18 @@ def ensure_stubs() -> list[subprocess.Popen]:
             [sys.executable, os.path.join(SCRIPT_DIR, "stub_llm.py"),
              "--port", str(STUB_LLM_PORT)],
             cwd=PROJECT_DIR))
+    if not stub_up(STUB_VTON_PORT):
+        procs.append(subprocess.Popen(
+            [sys.executable, os.path.join(SCRIPT_DIR, "stub_vton.py"),
+             "--port", str(STUB_VTON_PORT)],
+            cwd=PROJECT_DIR))
     for _ in range(50):
-        if stub_up(STUB_ENCODER_PORT) and stub_up(STUB_LLM_PORT):
+        if (stub_up(STUB_ENCODER_PORT) and stub_up(STUB_LLM_PORT)
+                and stub_up(STUB_VTON_PORT)):
             return procs
         time.sleep(0.2)
     raise Refused("stub servers did not come up on "
-                  f"{STUB_ENCODER_PORT}/{STUB_LLM_PORT}")
+                  f"{STUB_ENCODER_PORT}/{STUB_LLM_PORT}/{STUB_VTON_PORT}")
 
 
 def stub_config(port: int, payload: dict) -> None:
@@ -253,6 +260,20 @@ def ensure_harness(base: str, svc: str) -> subprocess.Popen | None:
     if os.name == "nt":
         cmd = ["cmd", "/c"] + cmd
     env = dict(os.environ, SUPABASE_URL=base, SUPABASE_SERVICE_ROLE_KEY=svc)
+    # functions/vton: point every engine at the local stub. These also live
+    # in supabase/functions/.env, but forcing them here (process env wins
+    # over the file) keeps the suite self-sufficient on a fresh clone — and
+    # guarantees a developer's REAL Cloudflare/fal credentials never leak
+    # into a test run.
+    env.update({
+        "KLEIN_CLOUDFLARE_URL": f"http://127.0.0.1:{STUB_VTON_PORT}/klein/cloudflare",
+        "KLEIN_FAL_URL": f"http://127.0.0.1:{STUB_VTON_PORT}/klein/fal",
+        "CLOUDFLARE_ACCOUNT_ID": "local-stub",
+        "CLOUDFLARE_API_TOKEN": "local-stub",
+        "FAL_KEY": "local-stub",
+        "VTON_URL": f"http://127.0.0.1:{STUB_VTON_PORT}/vton",
+        "VTON_BEARER_TOKEN": "local-stub-vton-token",
+    })
     log_fh = open(HARNESS_LOG, "w", encoding="utf-8")
     proc = subprocess.Popen(cmd, cwd=PROJECT_DIR, env=env,
                             stdout=log_fh, stderr=subprocess.STDOUT)
@@ -963,6 +984,131 @@ def a26_anchor(fx: Fx) -> None:
            "; ".join(problems) if problems else "anchor in both combos, similarity null")
 
 
+# ------------------------------------------------- functions/vton (B2B chain)
+STUB_IMAGE = f"http://127.0.0.1:{STUB_VTON_PORT}/fal/image.png"
+
+
+def a27_vton_render(fx: Fx) -> None:
+    """op=render: combo garment -> klein 4B -> inline data URI."""
+    st, p, text, _ = api(
+        fx.fns, None, "POST", "/vton",
+        headers={"Authorization": f"Bearer {fx.key_a_live}"},
+        body={"op": "render",
+              "items": [{"image_url": STUB_IMAGE,
+                         "description": "blue linen office shirt",
+                         "section": "top"}],
+              "gender": "woman", "age": 28})
+    image = p.get("image", "") if isinstance(p, dict) else ""
+    meta = p.get("meta", {}) if isinstance(p, dict) else {}
+    lat = meta.get("latency_ms") or {}
+    ok = (st == 200 and p.get("op") == "render"
+          and image.startswith("data:image/") and ";base64," in image
+          and meta.get("provider") == "cloudflare"
+          and meta.get("model") == "flux-2-klein-4b"
+          and "render" in lat)
+    record("A27 vton render -> klein data URI", ok,
+           f"http={st} provider={meta.get('provider')} "
+           f"{('err=' + err_code(p)) if not ok else 'lat=' + str(lat)} "
+           f"{'' if ok else text[:120]}")
+
+
+def a28_vton_tryon(fx: Fx) -> None:
+    """op=tryon: person + garment URLs -> FASHN gateway -> PNG data URI."""
+    st, p, text, _ = api(
+        fx.fns, None, "POST", "/vton",
+        headers={"Authorization": f"Bearer {fx.key_a_live}"},
+        body={"op": "tryon", "person_image_url": STUB_IMAGE,
+              "garment_image_url": STUB_IMAGE,
+              "category": "one-pieces", "num_timesteps": 20})
+    image = p.get("image", "") if isinstance(p, dict) else ""
+    meta = p.get("meta", {}) if isinstance(p, dict) else {}
+    ok = (st == 200 and p.get("op") == "tryon"
+          and image.startswith("data:image/png;base64,")
+          and meta.get("provider") == "modal-fashn"
+          and meta.get("category") == "one-pieces"
+          and "tryon" in (meta.get("latency_ms") or {}))
+    record("A28 vton tryon -> FASHN data URI", ok,
+           f"http={st} provider={meta.get('provider')} "
+           f"{('err=' + err_code(p)) if not ok else ''} "
+           f"{'' if ok else text[:120]}")
+
+
+def a29_vton_look_chains(fx: Fx) -> None:
+    """op=look: render THEN tryon in one call, both stages timed."""
+    st, p, text, _ = api(
+        fx.fns, None, "POST", "/vton",
+        headers={"Authorization": f"Bearer {fx.key_a_live}"},
+        body={"op": "look",
+              "items": [{"image_url": STUB_IMAGE, "description": "kurta",
+                         "section": "top"},
+                        {"image_url": STUB_IMAGE, "description": "trousers",
+                         "section": "bottom"}],
+              "person_image_url": STUB_IMAGE})
+    meta = p.get("meta", {}) if isinstance(p, dict) else {}
+    lat = meta.get("latency_ms") or {}
+    image = p.get("image", "") if isinstance(p, dict) else ""
+    ok = (st == 200 and p.get("op") == "look"
+          and image.startswith("data:image/png;base64,")
+          and meta.get("render_provider") == "cloudflare"
+          and meta.get("provider") == "modal-fashn"
+          and "render" in lat and "tryon" in lat)
+    record("A29 vton look chains render+tryon", ok,
+           f"http={st} render={meta.get('render_provider')} "
+           f"tryon={meta.get('provider')} lat={lat} "
+           f"{('err=' + err_code(p)) if not ok else ''} "
+           f"{'' if ok else text[:120]}")
+
+
+def a30_vton_validation(fx: Fx) -> None:
+    """401 without a key; every malformed body -> 400 invalid_request."""
+    hdr = {"Authorization": f"Bearer {fx.key_a_live}"}
+    problems = []
+    st, p, _, _ = api(fx.fns, None, "POST", "/vton",
+                      body={"op": "render", "items": []})   # no key at all
+    if not (st == 401 and err_code(p) == "unauthorized"):
+        problems.append(f"no-key={st}/{err_code(p)}")
+    cases = [
+        ({}, "missing op"),
+        ({"op": "explode"}, "bad op"),
+        ({"op": "render"}, "items missing"),
+        ({"op": "render", "items": [{"image_url": STUB_IMAGE}] * 5}, "5 items"),
+        ({"op": "render",
+          "items": [{"image_url": STUB_IMAGE, "section": "nope"}]}, "bad section"),
+        ({"op": "tryon", "garment_image_url": STUB_IMAGE}, "no person"),
+        ({"op": "tryon", "person_image_url": STUB_IMAGE,
+          "garment_image_url": STUB_IMAGE, "category": "socks"}, "bad category"),
+        ({"op": "look", "person_image_url": STUB_IMAGE}, "look without items"),
+    ]
+    for body, label in cases:
+        st, p, _, _ = api(fx.fns, None, "POST", "/vton", body=body, headers=hdr)
+        if not (st == 400 and err_code(p) == "invalid_request"):
+            problems.append(f"{label}={st}/{err_code(p)}")
+    record("A30 vton validation (401/400s)", not problems,
+           "; ".join(problems) if problems else f"{len(cases) + 1} cases correct")
+
+
+def a31_vton_metered(fx: Fx) -> None:
+    """One usage_events row per vton call, endpoint='vton'; 401 excluded."""
+    marker = "apivtonmeter000001"
+    api(fx.fns, None, "POST", "/vton",
+        headers={"Authorization": f"Bearer {fx.key_a_live}",
+                 "X-Request-Id": marker},
+        body={"op": "render", "items": [{"image_url": STUB_IMAGE}]})
+    rows = rest_ok(fx.base, fx.svc, "GET",
+                   f"/rest/v1/usage_events?request_id=eq.{marker}"
+                   "&select=id,endpoint,status_code")
+    marker2 = "apivtonmeter000002"
+    api(fx.fns, None, "POST", "/vton", body={"op": "render"},
+        headers={"X-Request-Id": marker2})                 # 401 -> no row
+    rows2 = rest_ok(fx.base, fx.svc, "GET",
+                    f"/rest/v1/usage_events?request_id=eq.{marker2}&select=id")
+    ok = (len(rows) == 1 and rows[0].get("endpoint") == "vton"
+          and rows[0].get("status_code") == 200 and len(rows2) == 0)
+    record("A31 vton metered (endpoint=vton, 401 out)", ok,
+           f"rows={len(rows)} endpoint={rows and rows[0].get('endpoint')} "
+           f"401_rows={len(rows2)}")
+
+
 # ------------------------------------------------------------------ main
 def main() -> int:
     load_dotenv_if_present()
@@ -1109,6 +1255,11 @@ def main() -> int:
             ("A24", lambda: a24_schema_audit_green(fx)),
             ("A25", lambda: a25_facets_isolation(fx)),
             ("A26", lambda: a26_anchor(fx)),
+            ("A27", lambda: a27_vton_render(fx)),
+            ("A28", lambda: a28_vton_tryon(fx)),
+            ("A29", lambda: a29_vton_look_chains(fx)),
+            ("A30", lambda: a30_vton_validation(fx)),
+            ("A31", lambda: a31_vton_metered(fx)),
         ]:
             try:
                 fn()

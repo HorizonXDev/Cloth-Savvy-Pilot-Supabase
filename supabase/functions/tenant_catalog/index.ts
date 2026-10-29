@@ -43,6 +43,11 @@ import { parseImportRow, type ParsedRow } from "../_pilot/import_row.ts";
 import { mapDbError } from "../_pilot/pgerror.ts";
 import { ALLOWED_SECTIONS, isSection } from "../_pilot/sections.ts";
 import { optInt, optString, readJsonObject } from "../_pilot/validation.ts";
+
+// Bulk body cap: staging batches carry up to 50 catalog rows (titles, urls,
+// colours, attributes ≈ up to ~1 MB worst case). The default 32 KB guard in
+// validation.ts would reject a full batch of wide rows.
+const MAX_BODY_BYTES = 1024 * 1024;
 import { resolvePortalSession, tenantOrigins } from "../_tenant/tenant.ts";
 
 const PRODUCT_COLUMNS =
@@ -198,7 +203,7 @@ Deno.serve((req) =>
       }
 
       // ================================================================= POST
-      const body = await readJsonObject(ctx.req);
+      const body = await readJsonObject(ctx.req, MAX_BODY_BYTES);
       const op = optString(body, "op", { required: true, max: 40 })!;
       const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
       // Validate a candidate row with THE shared rules; messages carry no

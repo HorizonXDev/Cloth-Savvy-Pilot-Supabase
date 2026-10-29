@@ -17,6 +17,7 @@ export type ErrorCode =
   | "unsupported_occasion"
   | "upstream_llm"
   | "upstream_encoder"
+  | "upstream_image"
   | "internal";
 
 const STATUS_BY_CODE: Record<ErrorCode, number> = {
@@ -28,6 +29,7 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   internal: 500,
   upstream_llm: 502,
   upstream_encoder: 503,
+  upstream_image: 502,
 };
 
 export function statusForCode(code: ErrorCode): number {

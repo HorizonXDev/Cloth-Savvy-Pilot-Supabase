@@ -38,6 +38,20 @@ export interface PilotEnv {
    * lets the portal origin stay off the public API's and the admin's lists. */
   TENANT_ALLOWED_ORIGINS?: string;
   PILOT_LLM_BASE_URL?: string;
+  /** B2B image generation (functions/vton) — see klein.ts / vton.ts.
+   * Cloudflare Workers AI first, fal.ai fallback for the klein 4B render
+   * step (the consumer app's proven provider order). */
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  FAL_KEY?: string;
+  /** FASHN VTON gateway on Modal (pilot-vton-server) + its bearer token. */
+  VTON_URL?: string;
+  VTON_BEARER_TOKEN?: string;
+  /** LOCAL TESTS ONLY: loopback-only overrides for the two klein providers
+   * (enforced in klein.ts exactly like PILOT_LLM_BASE_URL, so a set secret
+   * can never redirect production traffic off the real providers). */
+  KLEIN_CLOUDFLARE_URL?: string;
+  KLEIN_FAL_URL?: string;
 }
 
 /** Everything the auth middleware resolves for a request. tenantId comes ONLY

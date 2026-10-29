@@ -1,7 +1,12 @@
 // _pilot/validation.ts — body parsing + field validation (pure, unit-tested).
 //
 // Limits (kept deliberately small — this is a server-to-server API):
-//   * whole body      ≤ 32 KB (checked on Content-Length and actual bytes)
+//   * whole body      ≤ 32 KB by default (checked on Content-Length and actual
+//                      bytes). Routes that legitimately carry bulk payloads
+//                      pass a bigger cap to readJsonObject: admin_catalog
+//                      (embeddings_merge — 500 vectors ≈ up to 8 MB) and
+//                      tenant_catalog (CSV staging batches — 1 MB). The 32 KB
+//                      default keeps every other route tight.
 //   * free-text fields ≤ 300 chars unless noted (style_notes, query, …)
 //   * color lists     ≤ 10 items, each ≤ 40 chars
 //   * unknown fields are IGNORED, never rejected — because tenant_id/slug in
@@ -14,11 +19,16 @@ import { PilotError } from "./errors.ts";
 export const MAX_BODY_BYTES = 32 * 1024;
 
 /** Parse the request body as JSON. Throws invalid_request (never leaks parse
- * internals) when empty, oversize or not a JSON object. */
-export async function readJsonObject(req: Request): Promise<Record<string, unknown>> {
+ * internals) when empty, oversize or not a JSON object.
+ *
+ * `maxBytes` defaults to the tight 32 KB; bulk routes pass their own cap. */
+export async function readJsonObject(
+  req: Request,
+  maxBytes: number = MAX_BODY_BYTES,
+): Promise<Record<string, unknown>> {
   const len = req.headers.get("Content-Length");
-  if (len !== null && Number(len) > MAX_BODY_BYTES) {
-    throw new PilotError("invalid_request", `request body exceeds ${MAX_BODY_BYTES} bytes`);
+  if (len !== null && Number(len) > maxBytes) {
+    throw new PilotError("invalid_request", `request body exceeds ${maxBytes} bytes`);
   }
   let text: string;
   try {
@@ -27,8 +37,8 @@ export async function readJsonObject(req: Request): Promise<Record<string, unkno
     throw new PilotError("invalid_request", "could not read request body");
   }
   const bytes = new TextEncoder().encode(text);
-  if (bytes.length > MAX_BODY_BYTES) {
-    throw new PilotError("invalid_request", `request body exceeds ${MAX_BODY_BYTES} bytes`);
+  if (bytes.length > maxBytes) {
+    throw new PilotError("invalid_request", `request body exceeds ${maxBytes} bytes`);
   }
   if (text.trim() === "") {
     throw new PilotError("invalid_request", "request body must be a JSON object");

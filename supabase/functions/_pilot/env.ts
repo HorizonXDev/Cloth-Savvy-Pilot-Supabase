@@ -22,5 +22,13 @@ export function readEnv(): PilotEnv {
     ADMIN_ALLOWED_ORIGINS: get("ADMIN_ALLOWED_ORIGINS"),
     TENANT_ALLOWED_ORIGINS: get("TENANT_ALLOWED_ORIGINS"),
     PILOT_LLM_BASE_URL: get("PILOT_LLM_BASE_URL"),
+    // B2B image generation (functions/vton — klein.ts / vton.ts)
+    CLOUDFLARE_ACCOUNT_ID: get("CLOUDFLARE_ACCOUNT_ID"),
+    CLOUDFLARE_API_TOKEN: get("CLOUDFLARE_API_TOKEN"),
+    FAL_KEY: get("FAL_KEY"),
+    VTON_URL: get("VTON_URL"),
+    VTON_BEARER_TOKEN: get("VTON_BEARER_TOKEN"),
+    KLEIN_CLOUDFLARE_URL: get("KLEIN_CLOUDFLARE_URL"),
+    KLEIN_FAL_URL: get("KLEIN_FAL_URL"),
   };
 }

@@ -1,6 +1,6 @@
 // tests/serve_local.ts — host-side harness that serves the pilot Edge
 // Functions OUTSIDE Docker, for tests/api_tests.py / admin_tests.py /
-// tenant_portal_tests.py (13 routes: API + admin_* + tenant_*).
+// tenant_portal_tests.py (14 routes: API + vton + admin_* + tenant_*).
 //
 // WHY THIS EXISTS (found 2026-10-24 on the local stack, CLI v2.118):
 //   1. `supabase start`'s edge-runtime container lives on the project's
@@ -34,6 +34,7 @@ const FN_NAMES = [
   "search",
   "occasions",
   "combos",
+  "vton",
   "admin_tenants",
   "admin_keys",
   "admin_usage",

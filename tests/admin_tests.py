@@ -35,6 +35,7 @@ from api_tests import (  # noqa: E402 - shared harness/stub helpers
     check_target_allowed,
     ensure_harness,
     ensure_stubs,
+    embed_text_for_row,
     err_code,
     j,
     kill_proc_tree,
@@ -243,6 +244,25 @@ def a07_embedding_job():
     counts = (merged or {}).get("counts", {})
     merge_ok = st2 == 200 and counts.get("merged") == 2 and counts.get("skipped") == 0
 
+    # 2b. the same op with a body OVER the old global 32 KB guard (regression:
+    #     the cap is now per-route — admin_catalog admits 8 MB). The pad field
+    #     is ignored by the op on purpose: only the body SIZE is under test;
+    #     the rows still perform a real, successful merge (vectors re-applied
+    #     by id — an upsert, so nothing downstream changes).
+    big_payload = {
+        "op": "embeddings_merge", "tenant_id": fx.tid_a,
+        "rows": [{"external_id": r["external_id"],
+                  "embedding": json.loads(vec(embed_text_for_row(r)))}
+                 for r in rows],
+        "source": "a07-bigbody.csv",
+        "pad": "x" * (48 * 1024),   # 48 KB alone > the old 32 KB cap
+    }
+    premise = len(json.dumps(big_payload)) > 32 * 1024
+    st2b, big, _, _ = j(fx.fns, fx.token, "POST", "/admin_catalog", body=big_payload)
+    big_counts = (big or {}).get("counts", {})
+    big_ok = (premise and st2b == 200 and big_counts.get("merged") == 2
+              and big_counts.get("skipped") == 0)
+
     # 3. products exist, the queue drained, the export is empty again
     st3, prods, _, _ = admin(fx.fns, fx.token, "GET",
                              f"/admin_catalog?op=products&tenant_id={fx.tid_a}")
@@ -296,10 +316,11 @@ def a07_embedding_job():
     run_ok = st11 == 200 and any("a07.csv" in (r.get("notes") or "")
                                  for r in runs.get("runs", []))
 
-    ok = (export_ok and merge_ok and total == 2 and export_clear and skip_ok
+    ok = (export_ok and merge_ok and big_ok and total == 2 and export_clear and skip_ok
           and unchanged and flagged and cleared and cleared_export and run_ok)
     record("A07 embedding job: export, merge by id, skips, re-embed flag", ok,
            f"export={sorted(export_ids)} merged={counts} total={total} "
+           f"bigbody={'ok' if big_ok else 'FAIL'} "
            f"skips={[s['reason'][:24] for s in skipped]} flag={'ok' if flagged else 'FAIL'} "
            f"cleared={'ok' if cleared else 'FAIL'} history={'ok' if run_ok else 'FAIL'}")
 

@@ -489,3 +489,10 @@ verify_jwt = false
 [functions.tenant_catalog]
 enabled = true
 verify_jwt = false
+
+# VTON image generation (functions/vton) — the B2B render/tryon/look chain.
+# Authenticates with the caller's sk_ key inside the function like every
+# other public route, hence verify_jwt=false (no user JWT exists).
+[functions.vton]
+enabled = true
+verify_jwt = false

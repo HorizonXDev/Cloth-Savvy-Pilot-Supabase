@@ -19,7 +19,9 @@
 //        cosine works.)
 //   POST {op:"embeddings_merge", tenant_id, rows:[...1..500], source?}
 //        the owner's generated vectors, applied BY ID. Each row is
-//        {external_id, embedding:[512 finite numbers]}. A match against a
+//        {external_id, embedding:[512 finite numbers]}. Body cap 8 MB (a
+//        500-row merge is ~4–6 MB); the dashboard sends 64-row chunks (~0.6 MB)
+//        so every request stays under this cap AND the platform ingress. A match against a
 //        queued staging row upserts `products` from the staged payload plus
 //        that vector and marks the row merged; a match against a product
 //        flagged needs_reembed just swaps the vector and clears the flag.
@@ -56,6 +58,12 @@ import { adminOrigins, getTenant, requireUuid, verifyAdmin } from "../_admin/adm
 const PRODUCT_COLUMNS =
   "id,external_id,title,section,category,gender,colors,price,in_stock,product_url,image_url,status,source,attributes,needs_reembed,created_at,updated_at";
 const MERGE_MAX = 500; // rows accepted per embeddings_merge call
+// Bulk body cap for this admin-token route: embeddings_merge carries up to
+// MERGE_MAX vectors (500 × ~8–12 KB ≈ 4–6 MB). The default 32 KB guard in
+// validation.ts is right for ordinary routes but rejected every real merge
+// ("request body exceeds 32768 bytes"). The dashboard chunks at 64 rows
+// (~0.6 MB), leaving big headroom below — and below the platform ingress.
+const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const VECTOR_DIM = 512; // matches p_embedding_dim and the encoder output
 
 function escapeIlike(q: string): string {
@@ -239,7 +247,7 @@ Deno.serve((req) =>
       }
 
       // ---------------------------------------------------------------- POST
-      const body = await readJsonObject(ctx.req);
+      const body = await readJsonObject(ctx.req, MAX_BODY_BYTES);
       const op = optString(body, "op", { required: true, max: 40 })!;
       const tenantId = requireUuid(body.tenant_id, "tenant_id");
       const tenant = await getTenant(ctx.db, tenantId, ctx.requestId);
