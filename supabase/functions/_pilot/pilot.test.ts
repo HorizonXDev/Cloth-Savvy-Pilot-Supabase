@@ -15,6 +15,13 @@ import {
   parseApiKey,
 } from "./key_format.ts";
 import {
+  decideExisting,
+  IDEMPOTENCY_HEADER,
+  type IdempotencyRow,
+  readIdempotencyKey,
+  requestHash,
+} from "./idempotency.ts";
+import {
   optBool,
   optColorList,
   optInt,
@@ -358,6 +365,89 @@ check("errors: internal message leaks nothing", () => {
     assert(!m.includes(needle), `internal message mentions ${needle}`);
   }
   assert(m.includes("request_id"), "tells the caller what to quote");
+});
+
+// ------------------------------------------------------------------ idempotency
+check("idempotency: header absent -> feature unused", () => {
+  assertEq(readIdempotencyKey(new Request("http://x/")), null);
+});
+check("idempotency: valid key is trimmed and accepted", () => {
+  const req = new Request("http://x/", {
+    headers: { [IDEMPOTENCY_HEADER]: "  retry-abc_123:xyz.my-key  " },
+  });
+  assertEq(readIdempotencyKey(req), "retry-abc_123:xyz.my-key");
+});
+check("idempotency: malformed keys are refused", () => {
+  for (const bad of ["short", "has spaces here", "a".repeat(129), "bad*char/key"]) {
+    const req = new Request("http://x/", { headers: { [IDEMPOTENCY_HEADER]: bad } });
+    let code = "";
+    try {
+      readIdempotencyKey(req);
+    } catch (e) {
+      code = e instanceof PilotError ? e.code : "not-a-pilot-error";
+    }
+    assertEq(code, "invalid_request", `key ${JSON.stringify(bad.slice(0, 20))}: `);
+  }
+});
+async function checkAsync(name: string, fn: () => Promise<void>) {
+  try {
+    await fn();
+    passed++;
+  } catch (e) {
+    failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+await checkAsync("idempotency: request hash is stable and body-sensitive", async () => {
+  const a = await requestHash({ op: "tryon", category: "tops" });
+  const b = await requestHash({ op: "tryon", category: "tops" });
+  const c = await requestHash({ op: "tryon", category: "bottoms" });
+  assertEq(a, b);
+  assert(a !== c, "different bodies must hash differently");
+  assertEq(a.length, 64, "sha256 hex: ");
+});
+check("idempotency: a finished key replays the stored response", () => {
+  const row: IdempotencyRow = {
+    request_hash: "h1",
+    status: "done",
+    response: { image: "data:image/png;base64,AAA" },
+    created_at: new Date().toISOString(),
+  };
+  assertEq(decideExisting(row, "h1", Date.now()), {
+    action: "replay",
+    response: row.response,
+  });
+});
+check("idempotency: same key + different body is a mismatch, never a replay", () => {
+  const now = Date.now();
+  for (const status of ["done", "in_progress"] as const) {
+    const row: IdempotencyRow = {
+      request_hash: "h1",
+      status,
+      response: { image: "x" },
+      created_at: new Date(now).toISOString(),
+    };
+    assertEq(decideExisting(row, "h2", now), { action: "mismatch" }, `${status}: `);
+  }
+});
+check("idempotency: in-flight duplicate waits, stale reservation is taken over", () => {
+  const now = Date.now();
+  const fresh: IdempotencyRow = {
+    request_hash: "h1",
+    status: "in_progress",
+    response: null,
+    created_at: new Date(now - 60_000).toISOString(), // 1 min
+  };
+  assertEq(decideExisting(fresh, "h1", now), { action: "in_flight" });
+
+  const stale: IdempotencyRow = {
+    ...fresh,
+    created_at: new Date(now - 11 * 60_000).toISOString(), // 11 min
+  };
+  assertEq(decideExisting(stale, "h1", now), { action: "take_over" });
+
+  const broken: IdempotencyRow = { ...fresh, created_at: "not-a-date" };
+  assertEq(decideExisting(broken, "h1", now), { action: "in_flight" });
 });
 
 // ---------------------------------------------------------------------- summary

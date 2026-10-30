@@ -76,7 +76,7 @@ Deno.serve((req) =>
     readEnv(),
     { endpoint: "admin.catalog", auth: false, methods: ["GET", "POST"], corsOrigins: adminOrigins(readEnv()) },
     async (ctx) => {
-      await verifyAdmin(ctx.req, ctx.env);
+      await verifyAdmin(ctx.req, ctx.env, ctx.requestId);
 
       // ----------------------------------------------------------------- GET
       if (ctx.req.method === "GET") {

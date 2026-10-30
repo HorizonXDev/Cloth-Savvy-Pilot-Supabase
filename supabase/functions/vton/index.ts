@@ -19,6 +19,14 @@
 // Auth: sk_ key — tenant from the key only (like every pilot route), and the
 // call is metered by the pipeline's finally block (endpoint label "vton").
 //
+// IDEMPOTENCY: send an optional `Idempotency-Key` header (8..128 chars of
+// A-Z a-z 0-9 . _ : -) to make retries safe. The first request reserves the
+// key (0013), runs, and stores the response; a retry with the same key and
+// body gets the stored image (header `Idempotency-Replayed: true`, meta
+// `idempotent_replay`) instead of paying for a second GPU run. Same key with
+// a different body is a 400; a concurrent duplicate is a 429 + Retry-After.
+// Without the header nothing changes.
+//
 // TIMEOUTS: Supabase kills the worker at 150 s wall-clock on the Free plan
 // (400 s on paid), so the WHOLE chain must answer inside that — the engine
 // budget is VTON_TIMEOUT_MS (135 s) and op=look shrinks it by whatever the
@@ -35,6 +43,13 @@ import { renderCombo, KLEIN_MAX_ITEMS, type RenderItem } from "../_pilot/klein.t
 import { tryOn, VTON_CATEGORIES, VTON_TIMEOUT_MS, type VtonCategory } from "../_pilot/vton.ts";
 import { PilotError } from "../_pilot/errors.ts";
 import { handle } from "../_pilot/http.ts";
+import {
+  beginIdempotent,
+  completeIdempotent,
+  readIdempotencyKey,
+  releaseIdempotent,
+  requestHash,
+} from "../_pilot/idempotency.ts";
 import { readEnv } from "../_pilot/env.ts";
 import { isSection } from "../_pilot/sections.ts";
 import { optInt, optString, readJsonObject } from "../_pilot/validation.ts";
@@ -109,19 +124,61 @@ function dataUri(mime: string, base64: string): string {
   return `data:${mime};base64,${base64}`;
 }
 
+/** Replay envelope: a fresh request id, and the original one kept in meta so
+ * a caller can tell "cached" from "ran again" without guessing. */
+function markedReplay(body: unknown, requestId: string): Record<string, unknown> {
+  const original = typeof body === "object" && body !== null && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : {};
+  const meta = typeof original.meta === "object" && original.meta !== null &&
+      !Array.isArray(original.meta)
+    ? original.meta as Record<string, unknown>
+    : {};
+  return {
+    ...original,
+    request_id: requestId,
+    meta: {
+      ...meta,
+      idempotent_replay: true,
+      original_request_id: typeof original.request_id === "string" ? original.request_id : null,
+    },
+  };
+}
+
 Deno.serve((req) =>
   handle(req, readEnv(), { endpoint: "vton", auth: true, methods: ["POST"] }, async (ctx) => {
     const auth = ctx.auth!;
     const body = await readJsonObject(ctx.req);
     const op = optString(body, "op", { required: true, values: OPS })! as Op;
 
-    if (op === "render") {
-      return await renderOp(ctx, body);
+    // Reserve BEFORE any provider call: a retry after a timeout must not pay
+    // for a second render. Invalid field values still release the slot below.
+    const slot = await beginIdempotent(
+      ctx.db,
+      auth.tenantId,
+      "vton",
+      readIdempotencyKey(ctx.req),
+      await requestHash(body),
+    );
+    if (slot.kind === "replay") {
+      return {
+        body: markedReplay(slot.response, ctx.requestId),
+        headers: { "Idempotency-Replayed": "true" },
+      };
     }
-    if (op === "tryon") {
-      return await tryOnOp(ctx, body);
+
+    try {
+      const result = op === "render"
+        ? await renderOp(ctx, body)
+        : op === "tryon"
+        ? await tryOnOp(ctx, body)
+        : await lookOp(ctx, body, auth.tenantId);
+      await completeIdempotent(ctx.db, auth.tenantId, "vton", slot.key, result.body);
+      return result;
+    } catch (err) {
+      await releaseIdempotent(ctx.db, auth.tenantId, "vton", slot.key);
+      throw err;
     }
-    return await lookOp(ctx, body, auth.tenantId);
 
     async function renderOp(c: HandlerContext, b: Record<string, unknown>): Promise<HandlerResult> {
       const items = parseItems(b);

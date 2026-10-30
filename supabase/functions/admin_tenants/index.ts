@@ -30,7 +30,7 @@ Deno.serve((req) =>
     readEnv(),
     { endpoint: "admin.tenants", auth: false, methods: ["GET", "POST", "PATCH", "DELETE"], corsOrigins: adminOrigins(readEnv()) },
     async (ctx) => {
-      await verifyAdmin(ctx.req, ctx.env);
+      await verifyAdmin(ctx.req, ctx.env, ctx.requestId);
 
       if (ctx.req.method === "GET") {
         const { data, error } = await ctx.db

@@ -27,7 +27,7 @@ Deno.serve((req) =>
     readEnv(),
     { endpoint: "admin.usage", auth: false, methods: ["GET"], corsOrigins: adminOrigins(readEnv()) },
     async (ctx) => {
-      await verifyAdmin(ctx.req, ctx.env);
+      await verifyAdmin(ctx.req, ctx.env, ctx.requestId);
 
       const url = new URL(ctx.req.url);
       const tenantId = requireUuid(url.searchParams.get("tenant_id"), "tenant_id");

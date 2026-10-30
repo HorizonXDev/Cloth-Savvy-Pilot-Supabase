@@ -1,13 +1,26 @@
 // _admin/admin.ts — shared core for the admin_* dashboard functions.
 //
-// Threat model (single owner, decision D5 in PLAN_BACKEND_AND_DASHBOARD.md):
-// every admin route is guarded by ONE shared secret, ADMIN_TOKEN, sent as
-// `Authorization: Bearer <token>` by the dashboard. The comparison is
-// constant-time (both sides hashed, XOR over fixed-length digests). The
-// routes run with the service-role client, so the token is the ONLY thing
+// Threat model (decision D5 in PLAN_BACKEND_AND_DASHBOARD.md, revised
+// 2026-10-30: shared-token-only auth replaced by real identities).
+//
+// Every admin route accepts exactly two credential kinds:
+//
+//   1. A Supabase Auth user JWT whose user_id is in public.admin_users
+//      (revoked_at NULL). This is how the dashboard signs in. Membership is
+//      the allow-list — being a signed-in user is not enough, and tenant_users
+//      grants nothing here.
+//   2. The ADMIN_TOKEN secret, as BREAK-GLASS only: curl, tests, recovery when
+//      GoTrue is unreachable. Constant-time comparison (both sides hashed,
+//      XOR over fixed-length digests).
+//
+// Every mutating request (POST/PATCH/DELETE) writes one admin_audit row after
+// the actor is known and before the handler runs: who, what, when, request id.
+// An audit insert failure is logged but does not block the operation — the
+// audit trail must never be the reason an admin cannot act.
+//
+// The routes run with the service-role client, so this check is the ONLY thing
 // between the world and tenant/key administration — fail closed everywhere:
-// missing ADMIN_TOKEN secret => every admin request refused (500), never an
-// open door.
+// bad token => 401, valid login without membership => 403, never an open door.
 //
 // These routes do NOT meter or rate-limit (auth:false in each function):
 // admin calls are human-driven, must never appear in usage_events, and are
@@ -19,9 +32,12 @@
 
 import { allowedOrigins } from "../_pilot/cors.ts";
 import { PilotError } from "../_pilot/errors.ts";
+import { logWarn } from "../_pilot/logger.ts";
 import { mapDbError } from "../_pilot/pgerror.ts";
 import { parseTenantSettings } from "../_pilot/settings.ts";
+import { serviceClient } from "../_pilot/supabase.ts";
 import type { PilotEnv, TenantSettings } from "../_pilot/types.ts";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 export const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -55,19 +71,103 @@ async function ctEqual(a: string, b: string): Promise<boolean> {
   return diff === 0;
 }
 
-/** Throws unless the request carries the exact admin bearer token. */
-export async function verifyAdmin(req: Request, env: PilotEnv): Promise<void> {
-  const expected = env.ADMIN_TOKEN;
-  if (!expected) {
-    // Fail closed with an operator-actionable message (config state only).
-    throw new PilotError("internal", "admin API is disabled — set the ADMIN_TOKEN secret");
+/** Who performed an admin request — recorded in admin_audit. */
+export type AdminActor =
+  | { kind: "break_glass"; id: null; email: null }
+  | { kind: "user"; id: string; email: string };
+
+interface AdminUserRow {
+  user_id: string;
+  email: string;
+  revoked_at: string | null;
+}
+
+/** Append an audit row for a mutating request. Best-effort by design. */
+async function recordAdminAudit(
+  db: SupabaseClient,
+  req: Request,
+  actor: AdminActor,
+  requestId: string | null,
+): Promise<void> {
+  if (req.method === "GET" || req.method === "OPTIONS" || req.method === "HEAD") return;
+  const url = new URL(req.url);
+  const { error } = await db.from("admin_audit").insert({
+    actor_kind: actor.kind,
+    actor_id: actor.kind === "user" ? actor.id : null,
+    actor_email: actor.kind === "user" ? actor.email : null,
+    method: req.method,
+    path: url.pathname + (url.search || ""),
+    request_id: requestId,
+  });
+  if (error) {
+    logWarn("admin_audit: insert failed", {
+      request_id: requestId,
+      pg_code: error.code ?? null,
+    });
   }
+}
+
+/**
+ * Resolve the admin actor or throw (401 bad credential, 403 valid login with
+ * no admin membership). Accepts a Supabase Auth user JWT from admin_users, or
+ * the ADMIN_TOKEN break-glass secret.
+ */
+export async function verifyAdmin(
+  req: Request,
+  env: PilotEnv,
+  requestId: string | null = null,
+): Promise<AdminActor> {
   const header = req.headers.get("Authorization") ?? "";
   const m = header.match(/^Bearer\s+(\S+)$/);
-  if (!m) throw new PilotError("unauthorized", "missing admin bearer token");
-  if (!(await ctEqual(m[1], expected))) {
-    throw new PilotError("unauthorized", "invalid admin token");
+  if (!m) {
+    throw new PilotError(
+      "unauthorized",
+      "missing 'Authorization: Bearer <session token>' header",
+    );
   }
+  const token = m[1];
+  const db = serviceClient(env);
+
+  let actor: AdminActor;
+
+  const breakGlass = env.ADMIN_TOKEN;
+  if (breakGlass && (await ctEqual(token, breakGlass))) {
+    actor = { kind: "break_glass", id: null, email: null };
+  } else {
+    // Real identity: verify the JWT against GoTrue, then the allow-list.
+    const { data: userData, error: userErr } = await db.auth.getUser(token);
+    if (userErr || !userData?.user) {
+      throw new PilotError(
+        "unauthorized",
+        breakGlass ? "invalid admin session or token" : "invalid admin session token",
+      );
+    }
+    const user = userData.user;
+
+    const { data: rows, error: lookupErr } = await db
+      .from("admin_users")
+      .select("user_id,email,revoked_at")
+      .eq("user_id", user.id)
+      .limit(1);
+    if (lookupErr) {
+      logWarn("admin auth: admin_users lookup failed", {
+        request_id: requestId,
+        pg_code: lookupErr.code ?? null,
+      });
+      throw new PilotError("internal", "admin auth backend unavailable");
+    }
+    const row = (rows as unknown as AdminUserRow[] | null)?.[0];
+    if (!row) {
+      throw new PilotError("forbidden", "this account is not an admin");
+    }
+    if (row.revoked_at !== null) {
+      throw new PilotError("forbidden", "admin access for this account has been revoked");
+    }
+    actor = { kind: "user", id: user.id, email: row.email || user.email || "" };
+  }
+
+  await recordAdminAudit(db, req, actor, requestId);
+  return actor;
 }
 
 export function requireUuid(value: unknown, field: string): string {

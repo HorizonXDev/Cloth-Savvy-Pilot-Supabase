@@ -33,7 +33,7 @@ Deno.serve((req) =>
     readEnv(),
     { endpoint: "admin.keys", auth: false, methods: ["GET", "POST", "PATCH"], corsOrigins: adminOrigins(readEnv()) },
     async (ctx) => {
-      await verifyAdmin(ctx.req, ctx.env);
+      await verifyAdmin(ctx.req, ctx.env, ctx.requestId);
 
       if (ctx.req.method === "GET") {
         const url = new URL(ctx.req.url);

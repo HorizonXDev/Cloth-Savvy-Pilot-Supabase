@@ -75,7 +75,7 @@ Deno.serve((req) =>
       corsOrigins: adminOrigins(readEnv()),
     },
     async (ctx) => {
-      await verifyAdmin(ctx.req, ctx.env);
+      await verifyAdmin(ctx.req, ctx.env, ctx.requestId);
 
       // ---- GET: list portal logins for a tenant --------------------------
       if (ctx.req.method === "GET") {

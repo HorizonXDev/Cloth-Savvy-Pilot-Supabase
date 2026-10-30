@@ -382,7 +382,8 @@ Cloth-Savvy-Pilot-supabase/
 │   │   ├── .env                 LOCAL-ONLY env for `functions serve` (gitignored; names in .env.example)
 │   │   ├── _pilot/              shared core: auth, rate limit, metering, encoder/LLM clients,
 │   │   │                        settings/recipes/validation/errors, pure logic + pilot.test.ts
-│   │   ├── _admin/admin.ts      shared ADMIN_TOKEN guard (constant-time) + admin helpers
+│   │   ├── _admin/admin.ts      admin guard: Supabase Auth JWT + admin_users allow-list,
+│   │   │                        ADMIN_TOKEN as break-glass, admin_audit writes
 │   │   ├── _tenant/tenant.ts    shared PORTAL guard: session JWT -> exactly one tenant
 │   │   ├── health/index.ts      GET  /functions/v1/health
 │   │   ├── occasions/index.ts   GET  /functions/v1/occasions
@@ -638,11 +639,24 @@ _run history + per-row failure reporting, a paginated product browser with
 archive/restore, a search preview (real encoder + real RPC), usage
 aggregates, and a health view.
 
-**Auth (decision D5, single-owner):** one shared `ADMIN_TOKEN` secret,
-pasted on the login screen, kept in browser localStorage only, verified
-constant-time inside every admin function. No token set = admin routes
-fail closed (500). Admin calls are NOT metered and never touch
+**Auth (decision D5, revised 2026-10-30):** the dashboard signs in with a
+**Supabase Auth account** (email + password). The server verifies the JWT
+against GoTrue and then requires the user id to be present in
+`public.admin_users` with `revoked_at IS NULL` — a valid login without
+membership gets 403. The session lives in sessionStorage (closing the tab
+signs you out). `ADMIN_TOKEN` survives only as **break-glass** for curl,
+tests and recovery; it is verified constant-time. Every mutating admin
+request (POST/PATCH/DELETE) writes an append-only `admin_audit` row (actor,
+method, path, request id). Admin calls are NOT metered and never touch
 `usage_events`.
+
+Seed the first admin after creating the auth user (Dashboard →
+Authentication → Users):
+
+```sql
+insert into public.admin_users (user_id, email)
+select id, email from auth.users where email = 'owner@example.com';
+```
 
 ### Run it locally
 
@@ -656,9 +670,13 @@ STUB_ENCODER_TOKEN=local-stub-encoder-token python tests/stub_encoder.py --port 
 python tests/stub_llm.py --port 8842 &
 # 3. the admin dashboard (standalone project, one level UP from here):
 cd ../admin-dashboard && cp .env.example .env.local && npm install && npm run dev
-# → http://localhost:3000 — login token = ADMIN_TOKEN from supabase/functions/.env
-#   (local value: local-admin-token-dev)
+# → http://localhost:3000 — sign in with the local admin account
+#   (create one in Studio → Authentication, then insert it into admin_users)
 ```
+
+Local break-glass (curl, or when GoTrue is unreachable): send
+`Authorization: Bearer <ADMIN_TOKEN>` from `supabase/functions/.env`
+(local value: `local-admin-token-dev`).
 
 Notes:
 * `npm run dev` pins **port 3000** because the local admin CORS allowlist
@@ -669,10 +687,10 @@ Notes:
   dev crashes the render worker on every dynamic route (`[id]`) with
   "Jest worker encountered 2 child process exceptions" — webpack mode is
   stable. Revisit when the Next release fixes it.
-* Test suites needed it too: `python tests/admin_tests.py` (12 tests:
-  auth, tenants, strict settings, keys show-once/revoke, suspend→403,
-  usage, import counters, search preview, archive, isolation, admin CORS,
-  health).
+* Test suites needed it too: `python tests/admin_tests.py` (14 tests:
+  auth, admin identities (bad JWT 401, non-admin user 403), tenants, strict
+  settings, keys show-once/revoke, suspend→403, usage, import counters,
+  search preview, archive, isolation, admin CORS, health).
 
 ### Deploy it — HOSTED
 
@@ -683,7 +701,12 @@ supabase functions deploy admin_keys     --project-ref <ref>
 supabase functions deploy admin_usage    --project-ref <ref>
 supabase functions deploy admin_catalog  --project-ref <ref>
 
-# one strong secret (shown once — store it in your password manager):
+# apply the admin-auth migration + seed your admin account:
+#   supabase db push --project-ref <ref>
+#   insert into public.admin_users (user_id, email)
+#   select id, email from auth.users where email = 'owner@example.com';
+
+# optional break-glass secret (shown once — store it in your password manager):
 openssl rand -hex 32
 supabase secrets set ADMIN_TOKEN=<that value> \
   ADMIN_ALLOWED_ORIGINS=https://your-dashboard-origin.example \
@@ -692,13 +715,18 @@ supabase secrets set ADMIN_TOKEN=<that value> \
 # point the admin dashboard at hosted:
 cd ../admin-dashboard && cp .env.example .env.local
 #   NEXT_PUBLIC_FUNCTIONS_URL=https://<ref>.supabase.co/functions/v1
+#   NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 npm run build && npm run start     # or any static/Node host you choose
 ```
 
-Rules: `ADMIN_TOKEN` lives ONLY in Supabase secrets + the operator's
-password manager — never in a repo file, never in `.env.local` of the
-repo, never logged. Rotate by re-running `supabase secrets set` with a
-fresh value (both sides pick it up on the next request; no redeploy).
+Rules: normal access is revoked by setting `admin_users.revoked_at` (next
+request is 403) or deleting the auth user; `ADMIN_TOKEN` is break-glass only
+and lives ONLY in Supabase secrets + the operator's password manager.
+Rotate it by re-running `supabase secrets set` (pick them up on the next
+request; no redeploy). Until `0012_admin_auth.sql` is applied, admin routes
+still work through break-glass — the only degradation is the audit insert,
+which is logged and skipped.
 
 ---
 
@@ -806,7 +834,7 @@ suites. The ones that carry the separation requirement:
 | Test | Proves |
 |---|---|
 | P01 | `tenant_*` reject no/garbage/admin-token/sk_ credentials |
-| P08 | **sudo separation**: a portal session JWT is 401 on EVERY `admin_*` route; ADMIN_TOKEN is 401 on EVERY `tenant_*` route; an sk_ key is 401 on `tenant_*`; a portal session is 401 on the public API (11/11) |
+| P08 | **sudo separation**: a portal session JWT is 403 on EVERY `admin_*` route (valid login, not in `admin_users`); ADMIN_TOKEN is 401 on EVERY `tenant_*` route; an sk_ key is 401 on `tenant_*`; a portal session is 401 on the public API (11/11) |
 | P05/P06 | a forged `tenant_id` in query/body is ignored; tenant B sees none of A's data |
 | P09/P10 | revoke → 403 immediately, reinstate → 200, delete → the login is gone |
 | P11 | an auth user with no membership row gets 403 |

@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
@@ -114,6 +115,43 @@ def a01_auth():
     acao = hdrs.get("Access-Control-Allow-Origin")
     record("A01 admin auth (401s, then 200)", ok,
            f"no-token={st} wrong={st2} with-token={st3} acao={acao}")
+
+
+def a01b_admin_auth_identities():
+    """The two credential kinds verifyAdmin now accepts, and the one it must
+    refuse: a signed-in Supabase user who is NOT in admin_users gets 403
+    (authentication is not authorization)."""
+    # 1. Not a JWT and not the token -> 401, never a 500.
+    st_bad, _, _, _ = admin(fx.fns, "not-a-jwt-and-not-the-token", "GET", "/admin_tenants")
+
+    # 2. Real Supabase Auth user, absent from admin_users -> 403.
+    email = f"test_admin_probe_{int(time.time())}@example.com"
+    password = "probe-password-123"
+    uid = ""
+    st_user = "setup-failed"
+    try:
+        st_c, created, _, _ = j(
+            fx.base, fx.svc, "POST", "/auth/v1/admin/users",
+            body={"email": email, "password": password, "email_confirm": True},
+        )
+        if st_c in (200, 201) and isinstance(created, dict):
+            uid = created.get("id") or ""
+        if uid:
+            st_t, tok, _, _ = j(
+                fx.base, fx.svc, "POST", "/auth/v1/token?grant_type=password",
+                body={"email": email, "password": password},
+            )
+            jwt = (tok or {}).get("access_token", "") if st_t == 200 else ""
+            if jwt:
+                st_u, _, _, _ = admin(fx.fns, jwt, "GET", "/admin_tenants")
+                st_user = str(st_u)
+    finally:
+        if uid:
+            j(fx.base, fx.svc, "DELETE", f"/auth/v1/admin/users/{uid}")
+
+    ok = st_bad == 401 and st_user == "403"
+    record("A01b admin identity (bad JWT 401, non-admin user 403)", ok,
+           f"bad-jwt={st_bad} non-admin={st_user}")
 
 
 def a02_create_tenant():
@@ -498,6 +536,7 @@ def main() -> int:
         try:
             for name, fn in [
                 ("A01", a01_auth),
+                ("A01b", a01b_admin_auth_identities),
                 ("A02", a02_create_tenant),
                 ("A03", a03_settings),
                 ("A04", a04_keys),
@@ -511,7 +550,7 @@ def main() -> int:
                 ("A12", a12_health),
                 ("A13", a13_delete_tenant),
             ]:
-                if not fx.tid_a and fn not in (a01_auth, a02_create_tenant):
+                if not fx.tid_a and fn not in (a01_auth, a01b_admin_auth_identities, a02_create_tenant):
                     # fixture tenant missing -> every later test is noise
                     record(name, False, "skipped (no tenant A)")
                     continue

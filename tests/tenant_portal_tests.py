@@ -10,7 +10,8 @@ What this suite proves, end to end:
     in either outcome),
   * a real password-grant session drives every tenant_* route,
   * CREDENTIAL SEPARATION (the two-dashboard requirement):
-      - a portal session JWT is REJECTED by every admin_* route (401),
+      - a portal session JWT is REJECTED by every admin_* route (403:
+        the JWT is real but the user is not in admin_users),
       - ADMIN_TOKEN is REJECTED by every tenant_* route (401),
       - an sk_ API key is REJECTED by tenant_* routes, and a portal
         session is REJECTED by the public API,
@@ -381,13 +382,17 @@ def p08_sudo_separation():
     """THE two-dashboard proof: credentials never cross the boundary."""
     fails = []
 
-    # 1. portal session JWT -> every admin_* route must be 401
+    # 1. portal session JWT -> every admin_* route must be 403.
+    #    Since 0012_admin_auth the credential is authenticated (it is a real
+    #    GoTrue session) but not authorized: the allow-list has no row for a
+    #    portal user, so the honest answer is 403, not a bare 401. Either way
+    #    the separation holds — what matters is that NO admin operation runs.
     for path in ("/admin_tenants", f"/admin_keys?tenant_id={fx.tid_a}",
                  f"/admin_usage?tenant_id={fx.tid_a}&days=7",
                  f"/admin_catalog?op=products&tenant_id={fx.tid_a}",
                  f"/admin_tenant_users?tenant_id={fx.tid_a}"):
         st, parsed, _, _ = portal(fx.fns, fx.tok_a, "GET", path)
-        if st != 401:
+        if st != 403:
             fails.append(f"session->admin {path}={st}")
 
     # 2. ADMIN_TOKEN -> every tenant_* route must be 401
@@ -408,7 +413,7 @@ def p08_sudo_separation():
         fails.append(f"session->public_api={st}")
 
     record("P08 sudo separation (session->admin, admin->portal, keys->portal)",
-           not fails, f"{11 - len(fails)}/11 rejected with 401" if not fails
+           not fails, f"{11 - len(fails)}/11 rejected" if not fails
            else "; ".join(fails))
 
 

@@ -1237,6 +1237,60 @@ def a34_vton_blocked_calls_free(fx: Fx) -> None:
            "200,429,429; +3 metered rows, +1 billable")
 
 
+def _vton_stub_hits(path: str) -> int:
+    """Per-path hit count from stub_vton (proof that a replay ran no GPU)."""
+    st, p, _, _ = j(f"http://127.0.0.1:{STUB_VTON_PORT}", None, "GET", "/__stub/stats")
+    if st != 200 or not isinstance(p, dict):
+        return -1
+    return int((p.get("hits") or {}).get(path, 0))
+
+
+def a35_vton_idempotency(fx: Fx) -> None:
+    """P1-4: `Idempotency-Key` makes a retry replay the stored response —
+    exactly ONE gateway call for two identical requests. The same key with a
+    different body is a 400, never a silently wrong image."""
+    body = {"op": "tryon", "person_image_url": STUB_IMAGE,
+            "garment_image_url": STUB_IMAGE, "category": "tops",
+            "num_timesteps": 20}
+    idem = f"test-idem-{uuid.uuid4().hex[:12]}"
+    key, _ = make_key(fx.base, fx.svc, fx.tid_b, "sk_live_", "b-idem")
+    hdr = {"Authorization": f"Bearer {key}", "Idempotency-Key": idem}
+
+    hits0 = _vton_stub_hits("/vton")
+    st1, p1, _, h1 = api(fx.fns, None, "POST", "/vton", body=body, headers=hdr)
+    hits1 = _vton_stub_hits("/vton")
+    st2, p2, _, h2 = api(fx.fns, None, "POST", "/vton", body=body, headers=hdr)
+    hits2 = _vton_stub_hits("/vton")
+    # same key, different body -> refuse
+    st3, p3, _, _ = api(fx.fns, None, "POST", "/vton",
+                        body={**body, "num_timesteps": 25}, headers=hdr)
+    # a request without the header behaves exactly as before (nothing to replay)
+    st4, p4, _, h4 = api(fx.fns, None, "POST", "/vton", body=body,
+                         headers={"Authorization": f"Bearer {key}"})
+
+    meta1 = p1.get("meta", {}) if isinstance(p1, dict) else {}
+    meta2 = p2.get("meta", {}) if isinstance(p2, dict) else {}
+    problems = []
+    if st1 != 200 or meta1.get("idempotent_replay", False) is not False:
+        problems.append(f"1st={st1} replay_flag={meta1.get('idempotent_replay')}")
+    if st2 != 200:
+        problems.append(f"2nd={st2}")
+    if meta2.get("idempotent_replay") is not True:
+        problems.append(f"2nd replay flag={meta2.get('idempotent_replay')}")
+    if h2.get("Idempotency-Replayed") != "true":
+        problems.append(f"header={h2.get('Idempotency-Replayed')}")
+    if st3 != 400 or err_code(p3) != "invalid_request":
+        problems.append(f"diff-body={st3}/{err_code(p3)}")
+    if st4 != 200:
+        problems.append(f"no-header={st4}")
+    if hits0 < 0 or hits1 - hits0 != 1 or hits2 - hits1 != 0:
+        problems.append(f"gpu_calls={hits1 - hits0}/{hits2 - hits1} (want 1/0)")
+    record("A35 vton Idempotency-Key (one GPU run, replay, 400 on reuse)",
+           not problems,
+           "; ".join(problems) if problems else
+           "200 then replayed; gpu_calls 1/0; diff-body 400; no-header 200")
+
+
 # ------------------------------------------------------------------ main
 def main() -> int:
     load_dotenv_if_present()
@@ -1396,6 +1450,7 @@ def main() -> int:
             ("A32", lambda: a32_vton_per_minute_limit(fx)),
             ("A33", lambda: a33_vton_monthly_cap(fx)),
             ("A34", lambda: a34_vton_blocked_calls_free(fx)),
+            ("A35", lambda: a35_vton_idempotency(fx)),
         ]:
             try:
                 fn()
