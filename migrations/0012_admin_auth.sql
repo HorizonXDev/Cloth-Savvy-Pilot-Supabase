@@ -61,6 +61,11 @@ alter table public.admin_audit force row level security;
 revoke all on table public.admin_audit from public, anon, authenticated;
 -- Append-only: INSERT + SELECT for the service role, deliberately no
 -- UPDATE/DELETE, so an audit row cannot be rewritten or removed by the API.
+-- The `revoke all` FIRST is load-bearing: Supabase installs table default
+-- privileges granting service_role full DML on every new table, so without it
+-- this grant adds nothing and the table would silently accept UPDATE/DELETE
+-- (seen live: service_privs showed all five verbs until revoked).
+revoke all on table public.admin_audit from service_role;
 grant select, insert on table public.admin_audit to service_role;
 
 comment on table public.admin_users is

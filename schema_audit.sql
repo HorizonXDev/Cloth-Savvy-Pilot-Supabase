@@ -11,7 +11,8 @@
 --     not even TRUNCATE/REFERENCES/TRIGGER leftovers)
 --   * service_role holds normal DML on every table (otherwise the API layer
 --     is broken)
---   * every table EXCEPT tenants carries a tenant_id column
+--   * every table EXCEPT the platform-wide ones (tenants, admin_users,
+--     admin_audit) carries a tenant_id column
 --   * anon / authenticated cannot EXECUTE any function; service_role can
 --     EXECUTE every function
 --   * an `offenders` list per object — EMPTY means OK
@@ -58,6 +59,13 @@ declare
   v_dml  text[] := array['select','insert','update','delete','truncate'];
   v_tid  boolean;
   v_noff int := 0;
+  -- The ONLY public tables allowed to carry no tenant_id, each deliberately
+  -- platform-wide rather than tenant-scoped:
+  --   tenants     the tenant registry itself (a tenant is not inside a tenant)
+  --   admin_users 0012 — an admin may act on ANY tenant, so scoping the row
+  --   admin_audit 0012 — records WHO called an admin route, not which tenant
+  -- Anything else missing tenant_id still FAILS.
+  v_platform text[] := array['tenants', 'admin_users', 'admin_audit'];
 begin
   -- ---------------------------------------------------------------- tables --
   for r in
@@ -113,7 +121,7 @@ begin
     if cardinality(v_svc) = 0 then
       v_off := v_off || 'service_role holds NOTHING (API writes/reads would 403)'::text;
     end if;
-    if r.relname <> 'tenants' and not v_tid then
+    if not (r.relname = any (v_platform)) and not v_tid then
       v_off := v_off || 'no tenant_id column'::text;
     end if;
     if cardinality(v_off) > 0 then

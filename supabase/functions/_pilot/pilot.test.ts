@@ -344,6 +344,7 @@ check("errors: code -> status for every stable code", () => {
     unsupported_occasion: 422,
     upstream_llm: 502,
     upstream_encoder: 503,
+    upstream_image: 502,
     internal: 500,
   };
   for (const [code, status] of Object.entries(want)) {
